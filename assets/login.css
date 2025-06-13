@@ -1,0 +1,41 @@
+body {
+    background: linear-gradient(135deg, #28f7d1 0%, #ACB6E5 100%);
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+.login-card {
+    background-image: linear-gradient(rgba(255,255,255,0.6), rgba(255,255,255,0.6)), url("logo.png");
+    background-color: #fff;
+    background-position: center;
+    background-size: 60%; /* Ajuste conforme necessário */
+    background-repeat: no-repeat;
+    border-radius: 20px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    padding: 40px;
+    width: 100%;
+    max-width: 400px;
+    animation: fadeIn 1s ease;
+    position: relative; /* Para garantir que o overlay funcione corretamente */
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-20px);}
+    to { opacity: 1; transform: translateY(0);}
+}
+.form-control {
+    border-radius: 10px;
+}
+.btn-primary {
+    border-radius: 10px;
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    border: none;
+}
+.btn-primary:hover {
+    background: linear-gradient(45deg, #5a67d8, #6b46c1);
+}
+.input-group-text {
+    border-radius: 10px 0 0 10px;
+    background: #f0f0f0;
+}

@@ -1,0 +1,6 @@
+body{
+    background-image: linear-gradient(rgba(255,255,255,0.6), rgba(255,255,255,0.6)), url("logo.png");
+    background-position: center;
+    background-size: 60%; /* Ajuste conforme necessário */
+    background-repeat: no-repeat;
+}
