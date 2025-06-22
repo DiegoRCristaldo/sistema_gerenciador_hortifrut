@@ -172,8 +172,8 @@ $result = $conn->query("SELECT * FROM produtos ORDER BY id DESC");
                     <input type="hidden" name="delete_id" value="<?= $row['id'] ?>">
                     <button type="submit" class="btn btn-danger btn-sm">Excluir</button>
                 </form>
-                <a href="etiquetas.php?id=<?= $row['id'] ?>" target="_blank" class="btn btn-warning btn-sm">
-                    Gerar Etiqueta
+                <a href="#" class="btn btn-warning btn-sm" onclick="gerarCodigoBarras(<?= $row['id'] ?>)">
+                    Gerar Código de Barras
                 </a>
             </td>
         </tr>
@@ -301,6 +301,34 @@ $result = $conn->query("SELECT * FROM produtos ORDER BY id DESC");
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function gerarCodigoBarras(id) {
+    fetch('gerar_codigo_barras.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: 'id=' + encodeURIComponent(id)
+    })
+    .then(async response => {
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error('Erro HTTP: ' + response.status + '\n' + text);
+        }
+        return response.json();
+    })
+    .then(data => {
+        alert(data.mensagem);
+        if (data.status === 'sucesso') {
+            location.reload();
+        }
+    })
+    .catch(error => {
+        alert('Erro na requisição:\n' + error.message);
+        console.error(error);
+    });
+}
+</script>
 
 </body>
 </html>

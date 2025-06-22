@@ -46,6 +46,7 @@ include 'verifica_login.php';
                 <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="produtos.php"><i class="fas fa-boxes me-2"></i>Gerenciar Produtos</a></li>
                 <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="usuarios.php"><i class="fas fa-users-cog me-2"></i>Gerenciar Usuários</a></li>
                 <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="funcionarios.php"><i class="fas fa-users-cog me-2"></i>Gerenciar Funcionários</a></li>
+                <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="etiquetas.php"><i class="fas fa-users-cog me-2"></i>Imprimir Etiquetas</a></li>
                 <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="relatorio.php"><i class="fas fa-chart-line me-2"></i>Relatórios</a></li>
             </ul>
         </div>
