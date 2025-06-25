@@ -24,8 +24,19 @@ switch ($filtro) {
         break;
 }
 
+// Deletar gasto
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['excluir_id'])) {
+    $id = intval($_POST['excluir_id']);
+    $stmt = $conn->prepare("DELETE FROM gastos WHERE id = ?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+
+    header("Location: gastos.php?filtro=$filtro");
+    exit;
+}
+
 // Inserir gasto
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['categoria'])) {
     $categoria = $conn->real_escape_string($_POST['categoria']);
     $valor = floatval($_POST['valor']);
     $data = $_POST['data'];
@@ -112,6 +123,7 @@ $resultado = $conn->query("SELECT * FROM gastos $where ORDER BY data DESC");
                 <th>Categoria</th>
                 <th>Valor</th>
                 <th>Descrição</th>
+                <th>Ação</th>
             </tr>
         </thead>
         <tbody>
@@ -126,6 +138,12 @@ $resultado = $conn->query("SELECT * FROM gastos $where ORDER BY data DESC");
                 <td><?= htmlspecialchars($row['categoria']) ?></td>
                 <td>R$ <?= number_format($row['valor'], 2, ',', '.') ?></td>
                 <td><?= htmlspecialchars($row['descricao']) ?></td>
+                <td>
+                    <form method="POST" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja excluir este gasto?');">
+                        <input type="hidden" name="excluir_id" value="<?= $row['id'] ?>">
+                        <button type="submit" class="btn btn-sm btn-danger ms-2">Excluir</button>
+                    </form>
+                </td>
             </tr>
         <?php endwhile; ?>
             <tr class="fw-bold bg-light">

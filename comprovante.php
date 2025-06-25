@@ -44,7 +44,8 @@ $itens = $conn->query("SELECT iv.*, p.nome, p.preco FROM itens_venda iv
 <body class="bg-light">
 
 <div class="container mt-5 bg-white p-4 rounded shadow">
-    <h2 class="text-center">Comprovante de Venda</h2>
+    <img class="banner" src="assets/banner.jpeg" alt="Banner escrito Hortifrut Quero Fruta" srcset="">
+    <h3 class="text-center">Comprovante de Venda</h3>
     <hr>
     <p><strong>ID da Venda:</strong> <?= $venda['id'] ?></p>
     <p><strong>Data:</strong> <?= date('d/m/Y H:i', strtotime($venda['data'])) ?></p>

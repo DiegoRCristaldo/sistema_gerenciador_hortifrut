@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['produtos'])) {
     <div class="sheet mt-4">
         <?php foreach ($etiquetas as $etiqueta): ?>
             <div class="etiqueta">
-                <strong><?= htmlspecialchars(mb_strimwidth($etiqueta['nome'], 0, 22, '...')) ?></strong>
+                <strong><?= htmlspecialchars(mb_strimwidth($etiqueta['nome'], 0, 35, '...')) ?></strong>
                 <small><?= number_format($etiqueta['preco'], 2, ',', '.') ?> R$ (<?= $etiqueta['unidade_medida'] ?>)</small><br>
                 <img src="data:image/png;base64,<?= base64_encode($generator->getBarcode($etiqueta['codigo_barras'], $generator::TYPE_EAN_13)) ?>" alt="Código de barras"><br>
                 <small><?= $etiqueta['codigo_barras'] ?></small>

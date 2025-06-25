@@ -59,6 +59,7 @@ $result = $conn->query("SELECT * FROM operadores");
 </head>
 <body class="container py-4">
     <h2><?= $editar ? 'Editar Usuário' : 'Cadastrar Novo Usuário' ?></h2>
+    <a href="index.php" class="btn btn-secondary">← Voltar ao Painel</a>
 
     <form method="post" class="mb-4">
         <?php if ($editar): ?>
@@ -108,6 +109,5 @@ $result = $conn->query("SELECT * FROM operadores");
         </tbody>
     </table>
 
-    <a href="index.php" class="btn btn-secondary">← Voltar</a>
 </body>
 </html>

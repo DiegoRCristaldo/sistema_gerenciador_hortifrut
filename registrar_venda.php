@@ -125,11 +125,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         <div class="mb-3 mt-3">
             <label class="form-label">Forma de Pagamento</label>
             <select name="pagamento" class="form-select" required>
-                <option value="">Selecione</option>
-                <option value="Dinheiro">Dinheiro</option>
                 <option value="Cartão de Crédito">Cartão de Crédito</option>
                 <option value="Cartão de Débito">Cartão de Débito</option>
                 <option value="PIX">PIX</option>
+                <option value="Dinheiro">Dinheiro</option>
             </select>
             <div class="mb-3 mt-3" id="valor-pago-div" style="display:none;">
                 <label class="form-label">Valor Pago (R$)</label>

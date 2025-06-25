@@ -4,3 +4,13 @@ body{
     background-size: 60%; /* Ajuste conforme necessário */
     background-repeat: no-repeat;
 }
+
+img{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.banner{
+    width: 1000px;
+    height: 100px;
+}

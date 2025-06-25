@@ -2,6 +2,21 @@
 include 'verifica_login.php';
 include 'config.php';
 
+// Deletar venda
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['excluir_id'])) {
+    $id = intval($_POST['excluir_id']);
+    
+    // Exclui também os itens vinculados à venda
+    $conn->query("DELETE FROM itens_venda WHERE venda_id = $id");
+
+    // Agora exclui a venda
+    $conn->query("DELETE FROM vendas WHERE id = $id");
+
+    // Redireciona para evitar reenvio do formulário e manter o filtro
+    header("Location: relatorio.php?filtro=$filtro&data_inicio=$dataInicio&data_fim=$dataFim&page=$page");
+    exit;
+}
+
 $filtro = $_GET['filtro'] ?? 'diario';
 $dataInicio = $_GET['data_inicio'] ?? null;
 $dataFim = $_GET['data_fim'] ?? null;
@@ -125,6 +140,7 @@ while($g = $graficoResult->fetch_assoc()){
                     <th>Total</th>
                     <th>Forma de Pagamento</th>
                     <th>Operador</th>
+                    <th>Ação</th>
                 </tr>
             </thead>
             <tbody>
@@ -137,6 +153,12 @@ while($g = $graficoResult->fetch_assoc()){
                             <td>R$ <?= number_format($row['total'], 2, ',', '.') ?></td>
                             <td><?= ucfirst($row['forma_pagamento']) ?></td>
                             <td><?= htmlspecialchars($row['operador'] ?? '---') ?></td>
+                            <td>
+                                    <form method="POST" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja excluir esta venda?');">
+                                    <input type="hidden" name="excluir_id" value="<?= $row['id'] ?>">
+                                    <button type="submit" class="btn btn-sm btn-danger ms-2">Excluir</button>
+                                </form>
+                            </td>
                         </tr>
                     <?php endwhile; ?>
                 <?php else: ?>
