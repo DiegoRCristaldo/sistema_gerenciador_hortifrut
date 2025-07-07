@@ -1,4 +1,6 @@
 <?php
+date_default_timezone_set('America/Sao_Paulo');
+
 session_start();
 
 $is_api_request = false;
@@ -26,7 +28,7 @@ if (!isset($_SESSION['usuario'])) {
 
 // Restrição para vendedores: só podem acessar registrar_venda.php
 $current = basename($_SERVER['PHP_SELF']);
-$permitido_vendedor = ['registrar_venda.php', 'comprovante.php'];
+$permitido_vendedor = ['registrar_venda.php', 'buscar_produto.php','comprovante.php', 'produtos.php'];
 
 if ($_SESSION['tipo'] === 'vendedor' && !in_array($current, $permitido_vendedor)) {
     header('Location: registrar_venda.php');

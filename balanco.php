@@ -1,4 +1,6 @@
 <?php
+date_default_timezone_set('America/Sao_Paulo');
+
 include 'config.php';
 
 function getPeriodoFiltro($periodo) {

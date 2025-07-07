@@ -19,12 +19,14 @@ CREATE TABLE itens_venda (
     id INT AUTO_INCREMENT PRIMARY KEY,
     venda_id INT,
     produto_id INT,
-    quantidade INT,
+    quantidade DOUBLE,
     unidade_medida VARCHAR(20),
     desconto DECIMAL(10,2) DEFAULT 0,
     FOREIGN KEY (venda_id) REFERENCES vendas(id),
     FOREIGN KEY (produto_id) REFERENCES produtos(id)
 );
+
+ALTER TABLE itens_venda MODIFY quantidade DOUBLE;
 
 CREATE TABLE operadores (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -70,4 +72,12 @@ CREATE TABLE vendas (
     desconto DECIMAL(10,2) DEFAULT 0,
     total_liquido DECIMAL(10,2) DEFAULT 0
 
+);
+
+CREATE TABLE pagamentos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    venda_id INT,
+    forma_pagamento VARCHAR(50),
+    valor_pago DECIMAL(10,2),
+    FOREIGN KEY (venda_id) REFERENCES vendas(id)
 );

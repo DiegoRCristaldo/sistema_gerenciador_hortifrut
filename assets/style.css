@@ -11,6 +11,7 @@ img{
     align-items: center;
 }
 .banner{
+    align-self: center;
     width: 1000px;
     height: 100px;
 }

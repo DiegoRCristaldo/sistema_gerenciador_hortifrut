@@ -60,7 +60,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             $unidade = $produto['unidade_medida'];
 
-            $stmt_item->bind_param("iiis", $venda_id, $id, $qtd, $unidade);
+            $stmt_item->bind_param("iids", $venda_id, $id, $qtd, $unidade);
             $stmt_item->execute();
         }
     }
@@ -78,6 +78,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <link rel="stylesheet" href="assets/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
     <style>
         #lista-produtos{
             background-color: rgba(0, 255, 38, 0.4);
@@ -87,8 +90,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <body class="bg-light">
 <div class="container mt-4">
     <h2>Registrar Venda</h2>
-    <a href="logout.php" class="btn btn-outline-dark mb-3">Sair</a>
-    <a href="index.php" class="btn btn-secondary mb-3">← Voltar ao Painel</a>
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+    <a href="logout.php" class="btn btn-outline-danger d-flex align-items-center gap-2">
+        <i class="bi bi-box-arrow-right"></i> Sair
+    </a>
+
+    <a href="index.php" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+        <i class="bi bi-arrow-left"></i> Voltar ao Painel
+    </a>
+
+    <a href="<?php echo $_SERVER['REQUEST_URI']; ?>" target="_blank" class="btn btn-outline-primary d-flex align-items-center gap-2">
+        <i class="bi bi-files"></i> Duplicar Página
+    </a>
+
+    <a href="produtos.php" class="btn btn-outline-success d-flex align-items-center gap-2">
+        <i class="bi bi-pencil-square"></i> Editar Produtos
+    </a>
+    </div>
 
     <form method="POST">
         <div class="d-flex flex-row justify-content-between align-items-center border p-1">

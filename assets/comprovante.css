@@ -1,0 +1,48 @@
+@media print {
+    body {
+        width: 72mm;
+        font-size: 12px;
+        margin: 0;
+    }
+
+    .container {
+        width: 100%;
+        padding: 0;
+        margin: 0;
+        box-shadow: none;
+    }
+
+    .table {
+        width: 100%;
+        font-size: 11px;
+    }
+
+    .table th, .table td {
+        padding: 4px;
+    }
+
+    .btn, .btn-secondary, .btn-primary {
+        display: none !important; /* Esconde botões */
+    }
+
+    .banner {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+    }
+
+    .d-flex, .text-center {
+        text-align: center !important;
+        justify-content: center !important;
+    }
+
+    h2 {
+        font-size: 16px;
+        margin: 10px 0;
+    }
+
+    p, li {
+        margin: 4px 0;
+    }
+}
