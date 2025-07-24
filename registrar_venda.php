@@ -1,6 +1,16 @@
 <?php
 include 'verifica_login.php';
 include 'config.php';
+include 'funcoes_caixa.php';
+
+$operador_id = $_SESSION['usuario']; 
+$caixa_id = getCaixaAberto($conn, $operador_id);
+
+if (!$caixa_id) {
+    echo "<script>alert('Nenhum caixa aberto foi encontrado. Abra um caixa antes de registrar vendas.'); window.location.href = 'abrir_caixa.php';</script>";
+    exit;
+}
+
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $quantidades = $_POST['quantidade'] ?? [];
@@ -43,8 +53,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $total -= $desconto;
     if($total < 0) $total = 0;
 
-    $stmt_venda = $conn->prepare("INSERT INTO vendas (total, forma_pagamento, desconto) VALUES (?, ?, ?)");
-    $stmt_venda->bind_param("dss", $total, $forma, $desconto);
+    $stmt_venda = $conn->prepare("INSERT INTO vendas (total, forma_pagamento, desconto, caixa_id) VALUES (?, ?, ?, ?)");
+    $stmt_venda->bind_param("dssi", $total, $forma, $desconto, $caixa_id);
     $stmt_venda->execute();
     $venda_id = $stmt_venda->insert_id;
 
@@ -80,33 +90,42 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-
-    <style>
-        #lista-produtos{
-            background-color: rgba(0, 255, 38, 0.4);
-        }
-    </style>
 </head>
 <body class="bg-light">
+    <?php
+    require 'view/header.php';
+    ?>
 <div class="container mt-4">
     <h2>Registrar Venda</h2>
 
     <div class="d-flex flex-wrap gap-2 mb-3">
-    <a href="logout.php" class="btn btn-outline-danger d-flex align-items-center gap-2">
-        <i class="bi bi-box-arrow-right"></i> Sair
-    </a>
+        <a href="fechar_caixa.php" class="btn btn-outline-warning d-flex align-items-center gap-2">
+            <i class="bi bi-cash-coin"></i> Fechar Caixa
+        </a>
 
-    <a href="index.php" class="btn btn-outline-secondary d-flex align-items-center gap-2">
-        <i class="bi bi-arrow-left"></i> Voltar ao Painel
-    </a>
+        <a href="sangria.php" class="btn btn-outline-danger d-flex align-items-center gap-2">
+            <i class="bi bi-arrow-down-circle"></i> Fazer Sangria
+        </a>
 
-    <a href="<?php echo $_SERVER['REQUEST_URI']; ?>" target="_blank" class="btn btn-outline-primary d-flex align-items-center gap-2">
-        <i class="bi bi-files"></i> Duplicar Página
-    </a>
+        <a href="relatorio_caixa.php" class="btn btn-outline-info d-flex align-items-center gap-2">
+            <i class="bi bi-clipboard-data"></i> Relatório do Caixa
+        </a>
 
-    <a href="produtos.php" class="btn btn-outline-success d-flex align-items-center gap-2">
-        <i class="bi bi-pencil-square"></i> Editar Produtos
-    </a>
+        <a href="logout.php" class="btn btn-outline-danger d-flex align-items-center gap-2">
+            <i class="bi bi-box-arrow-right"></i> Sair
+        </a>
+
+        <a href="index.php" class="btn btn-outline-secondary d-flex align-items-center gap-2">
+            <i class="bi bi-arrow-left"></i> Voltar ao Painel
+        </a>
+
+        <a href="<?php echo $_SERVER['REQUEST_URI']; ?>" target="_blank" class="btn btn-outline-primary d-flex align-items-center gap-2">
+            <i class="bi bi-files"></i> Duplicar Página
+        </a>
+
+        <a href="produtos.php" class="btn btn-outline-success d-flex align-items-center gap-2">
+            <i class="bi bi-pencil-square"></i> Editar Produtos
+        </a>
     </div>
 
     <form method="POST">
@@ -138,7 +157,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </div>
 
         <div class="mt-3">
-            <strong>Total: R$ <span id="total">0.00</span></strong>
+            <h3><strong>Total: R$ <span id="total">0.00</span></strong></h3>
         </div>
 
         <div class="mb-3 mt-3">
@@ -159,7 +178,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
         </div>
 
-        <button type="button" class="btn btn-success" onclick=" confirmarFinalizacao()">Finalizar Venda</button>
+        <button type="button" class="btn btn-success" onclick="confirmarFinalizacao()">Finalizar Venda</button>
     </form>
 </div>
 
@@ -226,7 +245,7 @@ function incluirProdutoNaVenda(produto) {
         div.innerHTML = `
             <div class="row align-items-center g-2 mb-2">
                 <div class="col-md-4">
-                    <strong>${produto.nome} (R$ ${parseFloat(produto.preco).toFixed(2)} ${produto.unidade_medida})</strong>
+                    <h5><strong>${produto.nome} (R$ ${parseFloat(produto.preco).toFixed(2)} ${produto.unidade_medida})</strong></h5>
                 </div>
 
                 <div class="col-md-3 d-flex align-items-center">
@@ -235,7 +254,7 @@ function incluirProdutoNaVenda(produto) {
                 </div>
 
                 <div class="col-md-3">
-                    <span>Subtotal: R$ <span id="subtotal-${id}">${parseFloat(produto.preco).toFixed(2)}</span></span>
+                    <h5><span>Subtotal: R$ <span id="subtotal-${id}">${parseFloat(produto.preco).toFixed(2)}</span></span></h5>
                 </div>
 
                 <div class="col-md-2">

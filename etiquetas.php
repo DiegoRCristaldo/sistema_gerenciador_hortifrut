@@ -61,9 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['produtos'])) {
 </head>
 <body class="bg-light">
 
-<div class="no-print">
-    <h3>Imprimir Etiquetas</h3>
-    <a href="index.php" class="btn btn-secondary">← Voltar ao Painel</a>
+<div class="no-print container py-5">
+    <h3 class="mb-4">Imprimir Etiquetas</h3>
+    <a href="index.php" class="btn btn-secondary mb-3">← Voltar ao Painel</a>
 
     <form method="POST" id="form-etiquetas" class="no-print mb-4">
         <div class="input-group mb-3">
@@ -154,7 +154,7 @@ function adicionarProduto(id, nome, preco, unidade) {
     const lista = document.getElementById('lista-produtos');
 
     const div = document.createElement('div');
-    div.className = 'input-group mb-2';
+    div.className = 'input-group border p-2 rounded mb-2';
     div.id = 'produto-' + id;
 
     div.innerHTML = `

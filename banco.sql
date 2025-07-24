@@ -71,7 +71,6 @@ CREATE TABLE vendas (
     operador_id INT,
     desconto DECIMAL(10,2) DEFAULT 0,
     total_liquido DECIMAL(10,2) DEFAULT 0
-
 );
 
 CREATE TABLE pagamentos (
@@ -80,4 +79,26 @@ CREATE TABLE pagamentos (
     forma_pagamento VARCHAR(50),
     valor_pago DECIMAL(10,2),
     FOREIGN KEY (venda_id) REFERENCES vendas(id)
+);
+
+CREATE TABLE caixas (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    operador_id INT,
+    data_abertura DATETIME NOT NULL,
+    valor_inicial DECIMAL(10,2) NOT NULL,
+    data_fechamento DATETIME DEFAULT NULL,
+    valor_fechamento DECIMAL(10,2) DEFAULT NULL
+);
+
+ALTER TABLE vendas ADD COLUMN caixa_id INT;
+
+CREATE TABLE sangrias (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    caixa_id INT NOT NULL,
+    operador_id INT NOT NULL,
+    valor DECIMAL(10,2) NOT NULL,
+    descricao VARCHAR(255),
+    data_sangria DATETIME NOT NULL,
+    FOREIGN KEY (caixa_id) REFERENCES caixas(id),
+    FOREIGN KEY (operador_id) REFERENCES usuarios(id)
 );

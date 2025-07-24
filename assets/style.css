@@ -15,3 +15,7 @@ img{
     width: 1000px;
     height: 100px;
 }
+
+#lista-produtos{
+    background-color: rgba(0, 255, 38, 0.4);
+}
