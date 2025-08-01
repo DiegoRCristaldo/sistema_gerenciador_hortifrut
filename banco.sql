@@ -100,5 +100,5 @@ CREATE TABLE sangrias (
     descricao VARCHAR(255),
     data_sangria DATETIME NOT NULL,
     FOREIGN KEY (caixa_id) REFERENCES caixas(id),
-    FOREIGN KEY (operador_id) REFERENCES usuarios(id)
+    FOREIGN KEY (operador_id) REFERENCES operadores(id)
 );

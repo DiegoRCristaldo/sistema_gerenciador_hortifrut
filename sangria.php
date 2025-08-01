@@ -40,15 +40,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <title>Registrar Sangria</title>
+    <link rel="stylesheet" href="assets/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
     <!-- Formulário HTML -->
     <div class="container mt-5">
         <h2>Registrar Sangria</h2>
-        <a href="registrar_venda.php" target="_blank" class="btn btn-outline-primary d-flex align-items-center gap-2">
-            <i class="bi bi-files"></i> Voltar para o caixa
-        </a>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <a href="registrar_venda.php" class="btn btn-outline-primary d-flex align-items-center gap-2">
+                <i class="bi bi-files"></i> Voltar para o caixa
+            </a>
+        </div>
         <form method="POST" class="mt-4">
             <label class="form-label">Valor da sangria:</label>
             <input type="number" name="valor" step="0.01" class="form-control" required autofocus>

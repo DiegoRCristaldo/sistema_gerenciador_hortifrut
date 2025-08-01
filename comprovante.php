@@ -58,7 +58,7 @@ $pagamentos = $conn->query("SELECT * FROM pagamentos WHERE venda_id = $id_venda"
             <li><?= htmlspecialchars($pg['forma_pagamento']) ?>: R$ <?= number_format($pg['valor_pago'], 2, ',', '.') ?></li>
         <?php endwhile; ?>
     </ul>
-    <p><strong>Operador:</strong> <?= htmlspecialchars($venda['operador']) ?></p>
+    <p><strong>Operador:</strong> <?= $_SESSION['usuario'] ?></p>
 
     <hr>
 

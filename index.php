@@ -8,7 +8,6 @@ include 'verifica_login.php';
     <meta charset="UTF-8">
     <title>Hortifrut Quero Fruta</title>
     <link rel="stylesheet" href="assets/style.css">
-    <link rel="stylesheet" href="assets/index.css">
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- FontAwesome para os ícones -->
@@ -20,24 +19,6 @@ include 'verifica_login.php';
 <body class="bg-light">
     
     <?php require "view/header.php";?>
-    <!-- Menu lateral Offcanvas -->
-    <div class="offcanvas offcanvas-start text-bg-dark" tabindex="-1" id="menuLateral" aria-labelledby="menuLateralLabel">
-        <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="menuLateralLabel">Gerenciamento</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-        </div>
-        <div class="offcanvas-body">
-            <ul class="list-group list-group-flush">
-                <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="registrar_venda.php"><i class="fas fa-cash-register me-2"></i>Registrar Venda</a></li>
-                <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="gastos.php"><i class="fas fa-money-bill-wave me-2"></i>Registrar Despesas</a></li>
-                <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="produtos.php"><i class="fas fa-boxes me-2"></i>Gerenciar Produtos</a></li>
-                <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="usuarios.php"><i class="fas fa-users-cog me-2"></i>Gerenciar Usuários</a></li>
-                <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="funcionarios.php"><i class="fas fa-users-cog me-2"></i>Gerenciar Funcionários</a></li>
-                <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="etiquetas.php"><i class="fas fa-users-cog me-2"></i>Imprimir Etiquetas</a></li>
-                <li class="list-group-item bg-dark border-0"><a class="text-white text-decoration-none" href="relatorio.php"><i class="fas fa-chart-line me-2"></i>Relatórios</a></li>
-            </ul>
-        </div>
-    </div>
 
     <?php include 'balanco.php' ?>
 

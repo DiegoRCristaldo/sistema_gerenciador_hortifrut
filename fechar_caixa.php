@@ -20,7 +20,7 @@ if (!$caixa) {
 $caixa_id = $caixa['id'];
 
 // Calcula total de vendas associadas a esse caixa
-$sqlTotal = "SELECT SUM(total_liquido) as total_caixa FROM vendas WHERE caixa_id = ?";
+$sqlTotal = "SELECT SUM(total) as total_caixa FROM vendas WHERE caixa_id = ?";
 $stmtTotal = $conn->prepare($sqlTotal);
 $stmtTotal->bind_param("i", $caixa_id);
 $stmtTotal->execute();
@@ -38,4 +38,6 @@ if ($stmtUpdate->execute()) {
 } else {
     echo "Erro ao fechar o caixa: " . $stmtUpdate->error;
 }
+
+require 'relatorio_caixa.php';
 ?>

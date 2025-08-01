@@ -3,8 +3,7 @@ include 'verifica_login.php';
 include 'config.php';
 include 'funcoes_caixa.php';
 
-$operador_id = $_SESSION['usuario']; 
-$caixa_id = getCaixaAberto($conn, $operador_id);
+$caixa_id = getCaixaAberto($conn, $usuario_logado);
 
 if (!$caixa_id) {
     echo "<script>alert('Nenhum caixa aberto foi encontrado. Abra um caixa antes de registrar vendas.'); window.location.href = 'abrir_caixa.php';</script>";
@@ -53,8 +52,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $total -= $desconto;
     if($total < 0) $total = 0;
 
-    $stmt_venda = $conn->prepare("INSERT INTO vendas (total, forma_pagamento, desconto, caixa_id) VALUES (?, ?, ?, ?)");
-    $stmt_venda->bind_param("dssi", $total, $forma, $desconto, $caixa_id);
+    $stmt_venda = $conn->prepare("INSERT INTO vendas (total, forma_pagamento, desconto, caixa_id, operador_id) VALUES (?, ?, ?, ?, ?)");
+    $stmt_venda->bind_param("dssii", $total, $forma, $desconto, $caixa_id, $operador_id);
     $stmt_venda->execute();
     $venda_id = $stmt_venda->insert_id;
 
@@ -105,10 +104,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         <a href="sangria.php" class="btn btn-outline-danger d-flex align-items-center gap-2">
             <i class="bi bi-arrow-down-circle"></i> Fazer Sangria
-        </a>
-
-        <a href="relatorio_caixa.php" class="btn btn-outline-info d-flex align-items-center gap-2">
-            <i class="bi bi-clipboard-data"></i> Relatório do Caixa
         </a>
 
         <a href="logout.php" class="btn btn-outline-danger d-flex align-items-center gap-2">
@@ -174,7 +169,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             </div>
 
             <div class="mb-3 mt-3" id="troco-div" style="display:none;">
-                <strong>Troco: R$ <span id="troco">0.00</span></strong>
+                <h5><strong>Troco: R$ <span id="troco">0.00</span></strong></h5>
             </div>
         </div>
 
