@@ -1,5 +1,6 @@
 <?php
 include 'config.php';
+include 'verifica_login.php';
 require_once 'vendor/autoload.php';
 
 use Picqer\Barcode\BarcodeGeneratorPNG;
@@ -48,18 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['produtos'])) {
         }
     }
 }
-?>
 
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>Imprimir Etiquetas</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/etiqueta.css">
-    <link rel="stylesheet" href="assets/style.css">
-</head>
-<body class="bg-light">
+require 'lista_links_principal.php';
+require "view/header.php";
+?>
 
 <div class="no-print container py-5">
     <h3 class="mb-4">Imprimir Etiquetas</h3>

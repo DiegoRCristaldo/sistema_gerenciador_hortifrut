@@ -47,17 +47,12 @@ if (isset($_GET['editar'])) {
 
 // Listagem
 $result = $conn->query("SELECT * FROM operadores");
+
+require 'lista_links_principal.php';
+require "view/header.php";
 ?>
 
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>Gerenciar Usuários</title>
-    <link rel="stylesheet" href="assets/style.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="container py-4">
+<div class="container py-4">
     <h2><?= $editar ? 'Editar Usuário' : 'Cadastrar Novo Usuário' ?></h2>
     <a href="index.php" class="btn btn-secondary">← Voltar ao Painel</a>
 
@@ -108,6 +103,7 @@ $result = $conn->query("SELECT * FROM operadores");
         <?php endwhile; ?>
         </tbody>
     </table>
+</div>
 
 </body>
 </html>

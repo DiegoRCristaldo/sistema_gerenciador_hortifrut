@@ -13,6 +13,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $_SESSION['usuario'] = $op['usuario'];
         $_SESSION['tipo'] = $op['tipo'];
         $_SESSION['id'] = $op['id'];
+        $_SESSION['operador_id'] = $op['id'];
         header("Location: index.php");
         exit;
     } else {

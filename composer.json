@@ -1,6 +1,7 @@
 {
     "require": {
         "dompdf/dompdf": "^3.1",
-        "picqer/php-barcode-generator": "^2.4"
+        "picqer/php-barcode-generator": "^2.4",
+        "nfephp-org/sped-nfe": "^5.1"
     }
 }

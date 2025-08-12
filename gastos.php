@@ -49,17 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['categoria'])) {
 
 // Buscar gastos com filtro
 $resultado = $conn->query("SELECT * FROM gastos $where ORDER BY data DESC");
+
+require 'lista_links_principal.php';
+require 'view/header.php';
 ?>
 
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>Controle de Gastos</title>
-    <link rel="stylesheet" href="assets/style.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
 <div class="container py-5">
     <h2 class="mb-4">Controle de Gastos da Empresa</h2>
     <a href="index.php" class="btn btn-secondary mb-4">← Voltar ao Painel</a>

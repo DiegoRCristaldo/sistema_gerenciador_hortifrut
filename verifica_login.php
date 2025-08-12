@@ -1,6 +1,4 @@
 <?php
-date_default_timezone_set('America/Sao_Paulo');
-
 session_start();
 
 $is_api_request = false;
@@ -26,11 +24,13 @@ if (!isset($_SESSION['usuario'])) {
     exit();
 }
 
-// Restrição para vendedores: só podem acessar registrar_venda.php
+// Restrição para vendedores: só podem acessar parte do sistema
 $current = basename($_SERVER['PHP_SELF']);
-$permitido_vendedor = ['registrar_venda.php', 'buscar_produto.php','comprovante.php', 'produtos.php'];
+$permitido_vendedor = ['abrir_caixa.php', 'fechar_caixa.php', 'relatorio_caixa.php', 'registrar_venda.php', 'buscar_produto.php','comprovante.php', 'produtos.php', 'sangria.php'];
 
-if ($_SESSION['tipo'] === 'vendedor' && !in_array($current, $permitido_vendedor)) {
+$usuario_tipo = $_SESSION['tipo'];
+
+if ($usuario_tipo === 'vendedor' && !in_array($current, $permitido_vendedor)) {
     header('Location: registrar_venda.php');
     exit();
 }

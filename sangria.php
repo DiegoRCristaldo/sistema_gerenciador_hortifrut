@@ -1,9 +1,10 @@
 <?php
 include 'verifica_login.php';
 include 'config.php';
+include 'funcoes_caixa.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $operador_id = $_SESSION['usuario'];
+    $operador_id = $_SESSION['operador_id'] ?? $_SESSION['id'] ?? null;
     $valor = floatval($_POST['valor']);
     $descricao = $_POST['descricao'] ?? '';
 
@@ -33,25 +34,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo "<script>alert('Erro ao registrar sangria: ');</script>" . $stmtInsert->error;
     }
 }
+
+$lista_links = [
+    ['href' => 'registrar_venda.php','icone' => 'bi bi-arrow-left', 'texto' => 'Voltar para o caixa', 'exibir' => true, 'target' => ''],
+    ['href' => 'fechar_caixa.php', 'icone' => 'bi bi-cash-coin', 'texto' => 'Fechar Caixa', 'exibir' => true, 'target' => ''],
+    ['href' => 'logout.php', 'icone' => 'bi bi-box-arrow-right', 'texto' => 'Sair', 'exibir' => true, 'target' => '']
+];
+require "view/header.php";
 ?>
 
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>Registrar Sangria</title>
-    <link rel="stylesheet" href="assets/style.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
     <!-- Formulário HTML -->
     <div class="container mt-5">
         <h2>Registrar Sangria</h2>
-        <div class="d-flex flex-wrap gap-2 mb-3">
-            <a href="registrar_venda.php" class="btn btn-outline-primary d-flex align-items-center gap-2">
-                <i class="bi bi-files"></i> Voltar para o caixa
-            </a>
-        </div>
         <form method="POST" class="mt-4">
             <label class="form-label">Valor da sangria:</label>
             <input type="number" name="valor" step="0.01" class="form-control" required autofocus>
@@ -62,5 +56,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button type="submit" class="btn btn-success">Registrar Sangria</button>
         </form>
     </div>    
+</main>
 </body>
 </html>

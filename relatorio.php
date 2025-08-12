@@ -81,19 +81,10 @@ while($g = $graficoResult->fetch_assoc()){
     $labels[] = date('d/m', strtotime($g['dia']));
     $valores[] = $g['total'];
 }
+
+require 'lista_links_principal.php';
+require "view/header.php";
 ?>
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>Relatório de Vendas</title>
-    <link rel="stylesheet" href="assets/style.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        @media print { .no-print { display: none !important; } }
-    </style>
-</head>
-<body class="bg-light">
 
 <div class="container py-4">
     <h2 class="mb-4">Relatório de Vendas</h2>

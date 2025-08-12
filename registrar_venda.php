@@ -3,21 +3,20 @@ include 'verifica_login.php';
 include 'config.php';
 include 'funcoes_caixa.php';
 
-$caixa_id = getCaixaAberto($conn, $usuario_logado);
+$caixa_id = getCaixaAberto($conn, $operador_id);
 
 if (!$caixa_id) {
     echo "<script>alert('Nenhum caixa aberto foi encontrado. Abra um caixa antes de registrar vendas.'); window.location.href = 'abrir_caixa.php';</script>";
     exit;
 }
 
-
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $quantidades = $_POST['quantidade'] ?? [];
     $desconto = isset($_POST['desconto']) ? (float)$_POST['desconto'] : 0;
-    $forma = $conn->real_escape_string($_POST['pagamento']);
+    $formas_pagamento = $_POST['forma_pagamento'] ?? [];
+    $valores_pagamento = $_POST['valor_pago'] ?? [];
     $total = 0;
 
-    // Verificação
     $totalItens = 0;
     foreach ($quantidades as $id => $qtd) {
         $qtd = (float)$qtd;
@@ -52,10 +51,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $total -= $desconto;
     if($total < 0) $total = 0;
 
-    $stmt_venda = $conn->prepare("INSERT INTO vendas (total, forma_pagamento, desconto, caixa_id, operador_id) VALUES (?, ?, ?, ?, ?)");
-    $stmt_venda->bind_param("dssii", $total, $forma, $desconto, $caixa_id, $operador_id);
-    $stmt_venda->execute();
-    $venda_id = $stmt_venda->insert_id;
+    // Se for uma única forma de pagamento (não dividida)
+    if (count($formas_pagamento) == 1) {
+        $forma = $conn->real_escape_string($formas_pagamento[0]);
+        $stmt_venda = $conn->prepare("INSERT INTO vendas (total, forma_pagamento, desconto, caixa_id, operador_id) VALUES (?, ?, ?, ?, ?)");
+        $stmt_venda->bind_param("dssii", $total, $forma, $desconto, $caixa_id, $operador_id);
+        $stmt_venda->execute();
+        $venda_id = $stmt_venda->insert_id;
+    } else {
+        $stmt_venda = $conn->prepare("INSERT INTO vendas (total, forma_pagamento, desconto, caixa_id, operador_id) VALUES (?, 'Multipla', ?, ?, ?)");
+        $stmt_venda->bind_param("dsii", $total, $desconto, $caixa_id, $operador_id);
+        $stmt_venda->execute();
+        $venda_id = $stmt_venda->insert_id;
+
+        $stmt_pagamento = $conn->prepare("INSERT INTO pagamentos (venda_id, forma_pagamento, valor_pago) VALUES (?, ?, ?)");
+        foreach ($formas_pagamento as $i => $forma_pagamento) {
+            $valor_pago = isset($valores_pagamento[$i]) ? (float)str_replace(',', '.', $valores_pagamento[$i]) : 0.0;
+            $forma_pagamento = $conn->real_escape_string($forma_pagamento);
+            $stmt_pagamento->bind_param("isd", $venda_id, $forma_pagamento, $valor_pago);
+            $stmt_pagamento->execute();
+        }
+    }
 
     foreach ($quantidades as $id => $qtd) {
         $id = (int)$id;
@@ -77,51 +93,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     header("Location: comprovante.php?id_venda=$venda_id");
     exit;
 }
-?>
 
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>Registrar Venda</title>
-    <link rel="stylesheet" href="assets/style.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-</head>
-<body class="bg-light">
-    <?php
-    require 'view/header.php';
+$uri = $_SERVER['REQUEST_URI'];
+$uri .= (strpos($uri, '?') !== false) ? '&duplicado=' . time() : '?duplicado=' . time();
+
+$lista_links = [
+    ['href' => $uri, 'icone' => 'bi bi-files', 'texto' => 'Duplicar Página', 'exibir' => true, 'target' => 'blank'],
+    ['href' => 'produtos.php', 'icone' => 'bi bi-pencil-square', 'texto' => 'Editar Produtos', 'exibir' => true, 'target' => ''],
+    ['href' => 'sangria.php', 'icone' => 'bi bi-arrow-down-circle', 'texto' => 'Fazer Sangria', 'exibir' => true, 'target' => ''],
+    ['href' => 'fechar_caixa.php', 'icone' => 'bi bi-cash-coin', 'texto' => 'Fechar Caixa', 'exibir' => true, 'target' => ''],
+    ['href' => 'index.php', 'icone' => 'bi bi-arrow-left', 'texto' => 'Voltar ao Painel', 'exibir' => $usuario_tipo === 'admin', 'target' => ''],
+    ['href' => 'logout.php', 'icone' => 'bi bi-box-arrow-right', 'texto' => 'Sair', 'exibir' => true, 'target' => ''],
+];
+
+require 'view/header.php';
+
     ?>
 <div class="container mt-4">
     <h2>Registrar Venda</h2>
-
-    <div class="d-flex flex-wrap gap-2 mb-3">
-        <a href="fechar_caixa.php" class="btn btn-outline-warning d-flex align-items-center gap-2">
-            <i class="bi bi-cash-coin"></i> Fechar Caixa
-        </a>
-
-        <a href="sangria.php" class="btn btn-outline-danger d-flex align-items-center gap-2">
-            <i class="bi bi-arrow-down-circle"></i> Fazer Sangria
-        </a>
-
-        <a href="logout.php" class="btn btn-outline-danger d-flex align-items-center gap-2">
-            <i class="bi bi-box-arrow-right"></i> Sair
-        </a>
-
-        <a href="index.php" class="btn btn-outline-secondary d-flex align-items-center gap-2">
-            <i class="bi bi-arrow-left"></i> Voltar ao Painel
-        </a>
-
-        <a href="<?php echo $_SERVER['REQUEST_URI']; ?>" target="_blank" class="btn btn-outline-primary d-flex align-items-center gap-2">
-            <i class="bi bi-files"></i> Duplicar Página
-        </a>
-
-        <a href="produtos.php" class="btn btn-outline-success d-flex align-items-center gap-2">
-            <i class="bi bi-pencil-square"></i> Editar Produtos
-        </a>
-    </div>
 
     <form method="POST">
         <div class="d-flex flex-row justify-content-between align-items-center border p-1">
@@ -157,12 +146,28 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         <div class="mb-3 mt-3">
             <label class="form-label">Forma de Pagamento</label>
-            <select name="pagamento" class="form-select" required>
+            <select class=form-select name="forma_pagamento[]" id="forma_pagamento_principal" required onchange="verificarMultipla(this)">
                 <option value="Cartão de Crédito">Cartão de Crédito</option>
                 <option value="Cartão de Débito">Cartão de Débito</option>
                 <option value="PIX">PIX</option>
                 <option value="Dinheiro">Dinheiro</option>
+                <option value="Múltipla">Dividir pagamento</option>
             </select>
+            </div>
+
+            <!-- Campo de valor (oculto inicialmente) -->
+            <div class="mb-3 mt-3" id="valor_total_container" style="margin-top: 10px; display: none;">
+                <label class="form-label">Valor total dessa forma:</label>
+                <input class="form-control" type="text" name="valor_pago[]" placeholder="Valor pago (R$)">
+            </div>
+
+            <!-- Bloco onde outras formas de pagamento serão adicionadas -->
+            <div id="pagamentos-extras" style="margin-top: 20px;"></div>
+
+            <!-- Botão para adicionar mais formas -->
+            <div class="mb-3 mt-3" id="botao-adicionar" style="display: none; margin-top: 10px;">
+                <button type="button" class="btn btn-primary" onclick="adicionarPagamento()">Adicionar Forma de Pagamento</button>
+            </div>
             <div class="mb-3 mt-3" id="valor-pago-div" style="display:none;">
                 <label class="form-label">Valor Pago (R$)</label>
                 <input type="number" step="0.01" min="0" id="valor-pago" class="form-control" placeholder="Digite o valor pago" oninput="calcularTroco()">
@@ -171,9 +176,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="mb-3 mt-3" id="troco-div" style="display:none;">
                 <h5><strong>Troco: R$ <span id="troco">0.00</span></strong></h5>
             </div>
+
+            <button type="button" class="btn btn-success" onclick="confirmarFinalizacao()">Finalizar Venda</button>
         </div>
 
-        <button type="button" class="btn btn-success" onclick="confirmarFinalizacao()">Finalizar Venda</button>
     </form>
 </div>
 
@@ -374,21 +380,48 @@ function confirmarFinalizacao() {
         document.querySelector('form').submit();
     }
 }
-</script>
 
-<script>
-document.querySelector('select[name="pagamento"]').addEventListener('change', function() {
-    const valorPagoDiv = document.getElementById('valor-pago-div');
-    const trocoDiv = document.getElementById('troco-div');
-    if (this.value === 'Dinheiro') {
-        valorPagoDiv.style.display = 'block';
-        trocoDiv.style.display = 'block';
-    } else {
-        valorPagoDiv.style.display = 'none';
-        trocoDiv.style.display = 'none';
+//Adiciona mais de uma formas de pagamento
+function verificarMultipla(select) {
+  const valorContainer = document.getElementById('valor_total_container');
+  const botaoAdicionar = document.getElementById('botao-adicionar');
+
+  if (select.value === 'Múltipla') {
+    valorContainer.style.display = 'none';
+    botaoAdicionar.style.display = 'block';
+  } else {
+    valorContainer.style.display = 'none'; // escondido porque não precisa informar valor
+    botaoAdicionar.style.display = 'none';
+
+    // Limpa os pagamentos extras
+    document.getElementById('pagamentos-extras').innerHTML = '';
+  }
+}
+
+document.querySelector('select[name="forma_pagamento[]"]').addEventListener('change', verificarDinheiroSelecionado);
+function verificarDinheiroSelecionado() {
+  const selects = document.querySelectorAll('select[name="forma_pagamento[]"]');
+  let temDinheiro = false;
+
+  selects.forEach(sel => {
+    if (sel.value === 'Dinheiro') {
+      temDinheiro = true;
     }
-    calcularTroco();  // Atualiza o troco se necessário
-});
+  });
+
+  const valorPagoDiv = document.getElementById('valor-pago-div');
+  const trocoDiv = document.getElementById('troco-div');
+
+  if (temDinheiro) {
+    valorPagoDiv.style.display = 'block';
+    trocoDiv.style.display = 'block';
+  } else {
+    valorPagoDiv.style.display = 'none';
+    trocoDiv.style.display = 'none';
+  }
+
+  calcularTroco();
+}
 
 function calcularTroco() {
     const valorPago = parseFloat(document.getElementById('valor-pago').value) || 0;
@@ -397,6 +430,52 @@ function calcularTroco() {
     if (troco < 0) troco = 0;
     document.getElementById('troco').innerText = troco.toFixed(2);
 }
+
+function adicionarPagamento() {
+  const container = document.getElementById('pagamentos-extras');
+
+  const div = document.createElement('div');
+  div.classList.add('pagamento-extra');
+  div.style.marginTop = '10px';
+
+  div.innerHTML = `
+    <div class="d-flex flex-row mb-3 mt-3">
+        <select class="form-select" name="forma_pagamento[]" required>
+            <option value="Cartão de Crédito">Cartão de Crédito</option>
+            <option value="Cartão de Débito">Cartão de Débito</option>
+            <option value="PIX">PIX</option>
+            <option value="Dinheiro">Dinheiro</option>
+        </select>
+        <input type="text" name="valor_pago[]" placeholder="Valor pago (R$)" class="form-control" required>
+        <button class="btn btn-danger" type="button" onclick="removerPagamento(this)">Remover</button>
+    </div>
+  `;
+
+  container.appendChild(div);
+
+  // Adiciona o event listener ao novo select
+  const novoSelect = div.querySelector('select');
+  novoSelect.addEventListener('change', verificarDinheiroSelecionado);
+}
+
+function removerPagamento(btn) {
+  btn.parentElement.remove();
+}
+
+//Duplicar página
+document.addEventListener("DOMContentLoaded", function () {
+    const botaoDuplicar = document.getElementById("duplicarPagina");
+    if (botaoDuplicar) {
+        botaoDuplicar.addEventListener("click", function (e) {
+            e.preventDefault(); // evita o comportamento padrão do link
+
+            const urlBase = window.location.href.split('?')[0]; // remove parâmetros
+            const novaUrl = urlBase + '?duplicado=' + new Date().getTime();
+            window.open(novaUrl, '_blank'); // abre nova aba sempre
+        });
+    }
+});
+
 </script>
 
 </body>

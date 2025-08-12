@@ -13,4 +13,6 @@ if ($conn->connect_error) {
     die("Erro de conexão: " . $conn->connect_error);
 }
 
+// Ajustar timezone no MySQL
+$conn->query("SET time_zone = '-03:00'");
 ?>

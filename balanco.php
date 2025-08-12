@@ -1,6 +1,4 @@
 <?php
-date_default_timezone_set('America/Sao_Paulo');
-
 include 'config.php';
 
 function getPeriodoFiltro($periodo) {
@@ -98,29 +96,29 @@ $lucro = $total_vendas - $total_gastos;
     <h2 class="mb-4">Balanço Financeiro</h2>
 
     <form class="mb-4" method="get">
-    <div class="row g-3 align-items-end">
-        <div class="col-md-3">
-            <label for="periodo" class="form-label">Período Rápido:</label>
-            <select name="periodo" id="periodo" class="form-select" onchange="this.form.submit()">
-                <option value="">Selecionar</option>
-                <option value="diario" <?= $periodo === 'diario' ? 'selected' : '' ?>>Hoje</option>
-                <option value="semanal" <?= $periodo === 'semanal' ? 'selected' : '' ?>>Esta Semana</option>
-                <option value="mensal" <?= $periodo === 'mensal' ? 'selected' : '' ?>>Este Mês</option>
-            </select>
+        <div class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label for="periodo" class="form-label">Período Rápido:</label>
+                <select name="periodo" id="periodo" class="form-select" onchange="this.form.submit()">
+                    <option value="">Selecionar</option>
+                    <option value="diario" <?= $periodo === 'diario' ? 'selected' : '' ?>>Hoje</option>
+                    <option value="semanal" <?= $periodo === 'semanal' ? 'selected' : '' ?>>Esta Semana</option>
+                    <option value="mensal" <?= $periodo === 'mensal' ? 'selected' : '' ?>>Este Mês</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="data_inicio" class="form-label">Data Inicial:</label>
+                <input type="date" id="data_inicio" name="data_inicio" value="<?= $_GET['data_inicio'] ?? '' ?>" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label for="data_fim" class="form-label">Data Final:</label>
+                <input type="date" id="data_fim" name="data_fim" value="<?= $_GET['data_fim'] ?? '' ?>" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100">Aplicar Filtro</button>
+            </div>
         </div>
-        <div class="col-md-3">
-            <label for="data_inicio" class="form-label">Data Inicial:</label>
-            <input type="date" id="data_inicio" name="data_inicio" value="<?= $_GET['data_inicio'] ?? '' ?>" class="form-control">
-        </div>
-        <div class="col-md-3">
-            <label for="data_fim" class="form-label">Data Final:</label>
-            <input type="date" id="data_fim" name="data_fim" value="<?= $_GET['data_fim'] ?? '' ?>" class="form-control">
-        </div>
-        <div class="col-md-3">
-            <button type="submit" class="btn btn-primary w-100">Aplicar Filtro</button>
-        </div>
-    </div>
-</form>
+    </form>
 
 
     <div class="row mb-4">
@@ -165,7 +163,6 @@ $lucro = $total_vendas - $total_gastos;
             <canvas id="graficoLinha" style="display: none;"></canvas>
         </div>
 
-    <a href="index.php" class="btn btn-secondary mt-4">← Voltar ao Painel</a>
     <button onclick="window.print()" class="btn btn-secondary mt-4">Imprimir</button>
 
     <?php

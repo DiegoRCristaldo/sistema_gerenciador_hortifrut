@@ -41,3 +41,49 @@ img{
 .bg-dark:hover {
     --bs-bg-opacity: 0.8 !important;
 }
+
+.modal-content{
+    background-image: linear-gradient(rgba(255,255,255,0.6), rgba(255,255,255,0.6)), url("logo.png");
+    background-position: center;
+    background-size: 80%; /* Ajuste conforme necessário */
+    background-repeat: no-repeat;
+}
+
+.etiqueta {
+    border: 1px solid #ccc;
+    padding: 10px;
+    width: 180px;
+    height: 130px;
+    margin: 5px;
+    display: inline-block;
+    text-align: center;
+    font-size: 14px;
+    background: white;
+}
+.etiqueta strong { 
+    font-size: 16px; 
+    display: block; 
+}
+.etiqueta small { 
+    font-size: 13px; 
+}
+.etiqueta img { 
+    width: 120px; 
+    height: auto; 
+}
+.sheet { 
+    display: flex; 
+    flex-wrap: wrap; 
+    justify-content: start; 
+}
+.no-print { 
+    margin-bottom: 20px; 
+}
+@media print {
+    .no-print { 
+        display: none !important; 
+    }
+    body { 
+        padding: 0; 
+    }
+}

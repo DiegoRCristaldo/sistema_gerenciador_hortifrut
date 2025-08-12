@@ -111,18 +111,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_id'], $_POST['ed
 
 // Buscar produtos
 $result = $conn->query("SELECT * FROM produtos ORDER BY id DESC");
-?>
 
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>Gerenciar Produtos</title>
-    <link rel="stylesheet" href="assets/style.css">
-    <link rel="stylesheet" href="assets/produtos.css">    
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
+require 'lista_links_principal.php';
+require "view/header.php";
+?>
 
 <div class="container py-5">
     <?php if (isset($_GET['sucesso'])): ?>

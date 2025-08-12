@@ -14,11 +14,22 @@ class ComposerStaticInitac2d307f4ed514763a8119f3523066bb
         ),
         'P' => 
         array (
+            'Psr\\Log\\' => 8,
             'Picqer\\Barcode\\' => 15,
+        ),
+        'N' => 
+        array (
+            'NFePHP\\NFe\\' => 11,
+            'NFePHP\\Gtin\\' => 12,
+            'NFePHP\\Common\\' => 14,
         ),
         'M' => 
         array (
             'Masterminds\\' => 12,
+        ),
+        'J' => 
+        array (
+            'JsonSchema\\' => 11,
         ),
         'F' => 
         array (
@@ -39,13 +50,33 @@ class ComposerStaticInitac2d307f4ed514763a8119f3523066bb
         array (
             0 => __DIR__ . '/..' . '/sabberworm/php-css-parser/src',
         ),
+        'Psr\\Log\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/psr/log/src',
+        ),
         'Picqer\\Barcode\\' => 
         array (
             0 => __DIR__ . '/..' . '/picqer/php-barcode-generator/src',
         ),
+        'NFePHP\\NFe\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/nfephp-org/sped-nfe/src',
+        ),
+        'NFePHP\\Gtin\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/nfephp-org/sped-gtin/src',
+        ),
+        'NFePHP\\Common\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/nfephp-org/sped-common/src',
+        ),
         'Masterminds\\' => 
         array (
             0 => __DIR__ . '/..' . '/masterminds/html5/src',
+        ),
+        'JsonSchema\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/justinrainbow/json-schema/src/JsonSchema',
         ),
         'FontLib\\' => 
         array (

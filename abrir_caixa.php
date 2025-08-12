@@ -1,29 +1,35 @@
 <?php
 include 'verifica_login.php';
 include 'config.php';
+include 'funcoes_caixa.php';
 
-// Verifica se já há um caixa aberto
-$operador_id = $_SESSION['usuario']; 
-$stmt = $conn->prepare("SELECT id FROM caixas WHERE operador_id = ? AND data_fechamento IS NULL");
-$stmt->bind_param("i", $operador_id);
-$stmt->execute();
-$result = $stmt->get_result();
-
-if ($result->num_rows > 0) {
-    echo "<script>alert('Você já possui um caixa aberto!'); window.location.href='registrar_venda.php';</script>";
+$operador_id = $_SESSION['operador_id'] ?? $_SESSION['id'] ?? null;
+if (!$operador_id) {
+    echo "Erro: operador não identificado.";
     exit;
 }
 
-// Processa o envio do formulário
+// se já tem caixa aberto, redireciona para registrar_venda
+$caixa_aberto = getCaixaAberto($conn, $operador_id);
+if ($caixa_aberto) {
+    $_SESSION['flash'] = 'Você já possui um caixa aberto!';
+    header("Location: registrar_venda.php");
+    exit;
+}
+
+$erro = '';
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $valor_inicial = isset($_POST['valor_inicial']) ? (float)str_replace(',', '.', $_POST['valor_inicial']) : 0;
+    $valor_inicial = isset($_POST['valor_inicial']) ? (float)str_replace(',', '.', $_POST['valor_inicial']) : 0.00;
 
     $stmt = $conn->prepare("INSERT INTO caixas (operador_id, data_abertura, valor_inicial) VALUES (?, NOW(), ?)");
     $stmt->bind_param("id", $operador_id, $valor_inicial);
-    $stmt->execute();
-
-    echo "<script>alert('Caixa aberto com sucesso!'); window.location.href='registrar_venda.php';</script>";
-    exit;
+    if ($stmt->execute()) {
+        $_SESSION['flash'] = 'Caixa aberto com sucesso!';
+        header("Location: registrar_venda.php");
+        exit;
+    } else {
+        $erro = "Erro ao abrir caixa: " . $stmt->error;
+    }
 }
 ?>
 
@@ -38,13 +44,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <body class="bg-light">
 <div class="container mt-5">
     <h2>Abrir Caixa</h2>
+    <?php if (!empty($erro)): ?>
+        <div class="alert alert-danger"><?= $erro ?></div>
+    <?php endif; ?>
     <form method="POST" class="mt-4">
         <div class="mb-3">
             <label for="valor_inicial" class="form-label">Valor Inicial em Caixa (R$)</label>
             <input type="number" step="0.01" min="0" name="valor_inicial" id="valor_inicial" class="form-control" required autofocus>
         </div>
         <button type="submit" class="btn btn-success">Abrir Caixa</button>
-        <a href="index.php" class="btn btn-secondary ms-2">Voltar</a>
+        <a href="logout.php" class="btn btn-secondary ms-2">Sair</a>
     </form>
 </div>
 </body>
