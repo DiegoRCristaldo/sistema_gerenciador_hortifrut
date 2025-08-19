@@ -21,6 +21,7 @@ class ComposerStaticInitac2d307f4ed514763a8119f3523066bb
         array (
             'NFePHP\\NFe\\' => 11,
             'NFePHP\\Gtin\\' => 12,
+            'NFePHP\\DA\\' => 10,
             'NFePHP\\Common\\' => 14,
         ),
         'M' => 
@@ -38,6 +39,11 @@ class ComposerStaticInitac2d307f4ed514763a8119f3523066bb
         'D' => 
         array (
             'Dompdf\\' => 7,
+        ),
+        'C' => 
+        array (
+            'Com\\Tecnick\\Color\\' => 18,
+            'Com\\Tecnick\\Barcode\\' => 20,
         ),
     );
 
@@ -66,6 +72,10 @@ class ComposerStaticInitac2d307f4ed514763a8119f3523066bb
         array (
             0 => __DIR__ . '/..' . '/nfephp-org/sped-gtin/src',
         ),
+        'NFePHP\\DA\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/nfephp-org/sped-da/src',
+        ),
         'NFePHP\\Common\\' => 
         array (
             0 => __DIR__ . '/..' . '/nfephp-org/sped-common/src',
@@ -85,6 +95,14 @@ class ComposerStaticInitac2d307f4ed514763a8119f3523066bb
         'Dompdf\\' => 
         array (
             0 => __DIR__ . '/..' . '/dompdf/dompdf/src',
+        ),
+        'Com\\Tecnick\\Color\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/tecnickcom/tc-lib-color/src',
+        ),
+        'Com\\Tecnick\\Barcode\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/tecnickcom/tc-lib-barcode/src',
         ),
     );
 

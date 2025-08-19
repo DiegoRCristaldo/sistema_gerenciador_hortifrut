@@ -42,6 +42,12 @@ CREATE TABLE produtos (
     codigo_barras VARCHAR(100) UNIQUE,
     unidade_medida VARCHAR(10) NOT NULL DEFAULT 'UN'
 );
+ALTER TABLE produtos 
+ADD COLUMN ncm VARCHAR(8) NULL,
+ADD COLUMN cfop VARCHAR(4) NULL;
+UPDATE produtos SET cfop = '5102' WHERE cfop IS NULL;
+ALTER TABLE produtos 
+ALTER COLUMN cfop SET DEFAULT '5102';
 
 CREATE TABLE unidades_produto (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -72,6 +78,11 @@ CREATE TABLE vendas (
     desconto DECIMAL(10,2) DEFAULT 0,
     total_liquido DECIMAL(10,2) DEFAULT 0
 );
+
+ALTER TABLE vendas ADD COLUMN chave_nfe VARCHAR(100) DEFAULT NULL, 
+                      ADD COLUMN protocolo VARCHAR(50) DEFAULT NULL,
+                      ADD COLUMN status_nf VARCHAR(30) DEFAULT NULL;
+
 
 CREATE TABLE pagamentos (
     id INT AUTO_INCREMENT PRIMARY KEY,

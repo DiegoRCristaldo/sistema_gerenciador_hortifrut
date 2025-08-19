@@ -16,13 +16,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
 }
 
 // Adicionar novo produto
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['novo_nome'], $_POST['novo_preco'], $_POST['novo_codigo'], $_POST['novo_unidade'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['novo_nome'], $_POST['novo_preco'], $_POST['novo_codigo'], $_POST['novo_ncm'], $_POST['novo_unidade'])) {
     $nome = trim($_POST['novo_nome']);
+    $nome = ucwords(strtolower($nome));
     $preco = floatval($_POST['novo_preco']);
     if ($preco <= 0) {
         $mensagem = "Preço deve ser maior que zero.";
     }
     $codigo = trim($_POST['novo_codigo']);
+    $ncm = formatarNCM($_POST['novo_ncm']);
+    // Limita a no máximo 8 dígitos
+    $ncm = substr($ncm, 0, 8);
     $unidade = trim($_POST['novo_unidade']);
 
     if (empty($nome) || empty($preco) || empty($unidade)) {
@@ -49,16 +53,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['novo_nome'], $_POST['
                     $mensagem = "Já existe um produto com este código de barras.";
                 } else {
                     // Insere normalmente
-                    $stmt = $conn->prepare("INSERT INTO produtos (nome, preco, codigo_barras, unidade_medida) VALUES (?, ?, ?, ?)");
-                    $stmt->bind_param("sdss", $nome, $preco, $codigo, $unidade);
+                    $stmt = $conn->prepare("INSERT INTO produtos (nome, preco, codigo_barras, ncm, unidade_medida) VALUES (?, ?, ?, ?, ?)");
+                    $stmt->bind_param("sdsss", $nome, $preco, $codigo, $ncm, $unidade);
                     $stmt->execute();
                     header("Location: produtos.php?sucesso=1");
                     exit;
                 }
             } else {
                 // Código de barras vazio: insere normalmente
-                $stmt = $conn->prepare("INSERT INTO produtos (nome, preco, codigo_barras, unidade_medida) VALUES (?, ?, NULLIF(?, ''), ?)");
-                $stmt->bind_param("sdss", $nome, $preco, $codigo, $unidade);
+                $stmt = $conn->prepare("INSERT INTO produtos (nome, preco, codigo_barras, ncm, unidade_medida) VALUES (?, ?, NULLIF(?, ''), NULLIF(?, ''), ?)");
+                $stmt->bind_param("sdsss", $nome, $preco, $codigo, $ncm, $unidade);
                 $stmt->execute();
                 header("Location: produtos.php?sucesso=1");
                 exit;
@@ -68,15 +72,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['novo_nome'], $_POST['
 }
 
 // Atualizar produto
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_id'], $_POST['edit_nome'], $_POST['edit_preco'], $_POST['edit_codigo'], $_POST['edit_unidade'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_id'], $_POST['edit_nome'], $_POST['edit_preco'], $_POST['edit_codigo'], $_POST['edit_ncm'], $_POST['edit_unidade'])) {
     $id = intval($_POST['edit_id']);
     $nome = trim($_POST['edit_nome']);
+    $nome = ucwords(strtolower($nome));
     $preco = floatval($_POST['edit_preco']);
     if ($preco <= 0) {
         $mensagem = "Preço deve ser maior que zero.";
     }
 
     $codigo = trim($_POST['edit_codigo']);
+    $ncm = formatarNCM($_POST['edit_ncm']);
+    // Limita a no máximo 8 dígitos
+    $ncm = substr($ncm, 0, 8);
     $unidade = trim($_POST['edit_unidade']);
 
     if (empty($nome) || empty($preco) || empty($unidade)) {
@@ -92,16 +100,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_id'], $_POST['ed
             if ($stmt->num_rows > 0) {
                 $mensagem = "Já existe outro produto com este código de barras.";
             } else {
-                $stmt = $conn->prepare("UPDATE produtos SET nome = ?, preco = ?, codigo_barras = ?, unidade_medida = ? WHERE id = ?");
-                $stmt->bind_param("sdssi", $nome, $preco, $codigo, $unidade, $id);
+                $stmt = $conn->prepare("UPDATE produtos SET nome = ?, preco = ?, codigo_barras = ?, ncm = ?, unidade_medida = ? WHERE id = ?");
+                $stmt->bind_param("sdsssi", $nome, $preco, $codigo, $ncm, $unidade, $id);
                 $stmt->execute();
                 header("Location: produtos.php");
                 exit;
             }
         } else {
             // Código vazio: atualiza como NULL
-            $stmt = $conn->prepare("UPDATE produtos SET nome = ?, preco = ?, codigo_barras = NULLIF(?, ''), unidade_medida = ? WHERE id = ?");
-            $stmt->bind_param("sdssi", $nome, $preco, $codigo, $unidade, $id);
+            $stmt = $conn->prepare("UPDATE produtos SET nome = ?, preco = ?, codigo_barras = NULLIF(?, ''), ncm = NULLIF(?, ''), unidade_medida = ? WHERE id = ?");
+            $stmt->bind_param("sdsssi", $nome, $preco, $codigo, $ncm, $unidade, $id);
             $stmt->execute();
             header("Location: produtos.php");
             exit;
@@ -111,6 +119,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_id'], $_POST['ed
 
 // Buscar produtos
 $result = $conn->query("SELECT * FROM produtos ORDER BY id DESC");
+
+// Função para formatar NCM
+function formatarNCM($ncm) {
+    // Remove tudo que não for número
+    $ncm = preg_replace('/\D/', '', $ncm);
+
+    // Preenche com zeros à esquerda até 8 dígitos
+    return str_pad($ncm, 8, '0', STR_PAD_LEFT);
+}
+
 
 require 'lista_links_principal.php';
 require "view/header.php";
@@ -144,6 +162,7 @@ require "view/header.php";
             <th>Nome</th>
             <th>Preço</th>
             <th>Código de Barras</th>
+            <th>Código NCM</th>
             <th>Unidade</th>
             <th>Ações</th>
         </tr>
@@ -155,6 +174,7 @@ require "view/header.php";
             <td><?= htmlspecialchars($row['nome']) ?></td>
             <td>R$ <?= number_format($row['preco'], 2, ',', '.') ?></td>
             <td><?= htmlspecialchars($row['codigo_barras']) ?></td>
+            <td><?= htmlspecialchars($row['ncm']) ?></td>
             <td><?= htmlspecialchars($row['unidade_medida']) ?></td>
             <td>
                 <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editarModal<?= $row['id'] ?>">
@@ -192,6 +212,10 @@ require "view/header.php";
                             <div class="mb-3">
                                 <label class="form-label">Código de Barras</label>
                                 <input type="text" name="edit_codigo" class="form-control" value="<?= htmlspecialchars($row['codigo_barras']) ?>">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Código NCM</label>
+                                <input type="text" name="edit_ncm" class="form-control" value="<?= htmlspecialchars($row['ncm']) ?>">
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Unidade de Medida</label>
@@ -258,6 +282,10 @@ require "view/header.php";
             <div class="mb-3">
                 <label class="form-label">Código de Barras</label>
                 <input type="text" name="novo_codigo" class="form-control" maxlength="20" pattern="[0-9]*">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Código NCM</label>
+                <input type="text" name="novo_ncm" class="form-control" pattern="[0-9]*">
             </div>
             <div class="mb-3">
                 <label class="form-label">Unidade de Medida</label>

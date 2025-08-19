@@ -54,6 +54,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </div>
         <button type="submit" class="btn btn-success">Abrir Caixa</button>
         <a href="logout.php" class="btn btn-secondary ms-2">Sair</a>
+        <a href="index.php" class="btn btn-secondary ms-2">Voltar</a>
     </form>
 </div>
 </body>

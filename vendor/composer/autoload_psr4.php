@@ -12,9 +12,12 @@ return array(
     'Picqer\\Barcode\\' => array($vendorDir . '/picqer/php-barcode-generator/src'),
     'NFePHP\\NFe\\' => array($vendorDir . '/nfephp-org/sped-nfe/src'),
     'NFePHP\\Gtin\\' => array($vendorDir . '/nfephp-org/sped-gtin/src'),
+    'NFePHP\\DA\\' => array($vendorDir . '/nfephp-org/sped-da/src'),
     'NFePHP\\Common\\' => array($vendorDir . '/nfephp-org/sped-common/src'),
     'Masterminds\\' => array($vendorDir . '/masterminds/html5/src'),
     'JsonSchema\\' => array($vendorDir . '/justinrainbow/json-schema/src/JsonSchema'),
     'FontLib\\' => array($vendorDir . '/dompdf/php-font-lib/src/FontLib'),
     'Dompdf\\' => array($vendorDir . '/dompdf/dompdf/src'),
+    'Com\\Tecnick\\Color\\' => array($vendorDir . '/tecnickcom/tc-lib-color/src'),
+    'Com\\Tecnick\\Barcode\\' => array($vendorDir . '/tecnickcom/tc-lib-barcode/src'),
 );

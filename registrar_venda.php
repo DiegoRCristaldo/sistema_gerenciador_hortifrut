@@ -1,15 +1,23 @@
 <?php
+use NFePHP\NFe\Tools;
+use NFePHP\Common\Certificate;
+use NFePHP\NFe\Common\Standardize;
+
 include 'verifica_login.php';
 include 'config.php';
 include 'funcoes_caixa.php';
 
-$caixa_id = getCaixaAberto($conn, $operador_id);
+$operador_id = function_exists('getOperadorId') ? getOperadorId($conn, $_SESSION['usuario']) : ($_SESSION['operador_id'] ?? $_SESSION['id'] ?? null);
+$caixaObj = getCaixaAberto($conn, $operador_id); // função que retorna info do caixa
+$caixa_id = is_array($caixaObj) ? $caixaObj['id'] : $caixaObj;
+
 
 if (!$caixa_id) {
     echo "<script>alert('Nenhum caixa aberto foi encontrado. Abra um caixa antes de registrar vendas.'); window.location.href = 'abrir_caixa.php';</script>";
     exit;
 }
 
+//Processamento de venda
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $quantidades = $_POST['quantidade'] ?? [];
     $desconto = isset($_POST['desconto']) ? (float)$_POST['desconto'] : 0;
@@ -30,8 +38,38 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         exit;
     }
 
-    $stmt_produto = $conn->prepare("SELECT preco, unidade_medida FROM produtos WHERE id = ?");
+    $stmt_produto = $conn->prepare("SELECT id, nome, preco, unidade_medida, ncm, cfop, codigo_barras FROM produtos WHERE id = ?");
     $stmt_item = $conn->prepare("INSERT INTO itens_venda (venda_id, produto_id, quantidade, unidade_medida) VALUES (?, ?, ?, ?)");
+
+    // calcula total e monta array de itens para XML
+    $itensParaXml = [];
+    foreach ($quantidades as $id => $qtd) {
+        $id = (int)$id;
+        $qtd = (float)$qtd;
+        if ($qtd <= 0) continue;
+
+        $stmt_produto->bind_param("i", $id);
+        $stmt_produto->execute();
+        $res = $stmt_produto->get_result();
+        $produto = $res->fetch_assoc();
+
+        $preco = (float)$produto['preco'];
+        $total += $preco * $qtd;
+
+        $itensParaXml[] = [
+            'id' => $produto['id'],
+            'cProd' => $produto['id'],
+            'cEAN' => $produto['codigo_barras'] ?? '',
+            'xProd' => $produto['nome'],
+            'NCM' => $produto['ncm'] ?? '07099990', // --- ADAPTE AQUI se tiver NCM na sua tabela
+            'CFOP' => $produto['cfop'] ?? '5102',   // --- 5102 - Venda de mercadoria adquirida ou recebida de terceiros dentro do mesmo estado.
+            'uCom' => $produto['unidade_medida'] ?? 'UN',
+            'qCom' => $qtd,
+            'vUnCom' => $preco,
+            'vProd' => $preco * $qtd,
+            'indTot' => 1
+        ];
+    }
 
     foreach ($quantidades as $id => $qtd) {
         $id = (int)$id;
@@ -90,8 +128,183 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
 
-    header("Location: comprovante.php?id_venda=$venda_id");
-    exit;
+    // Monta dados para a NFC-e
+    $cnpjEmitente = $cnpjQueroFruta;
+    $configJsonPath = __DIR__ . $configJsonCaminho; 
+    $pfxPath = __DIR__ . $certificadoPfx; 
+    $pfxPassword = $senhaPfx; 
+
+    // Monta array dadosVenda
+    $dadosVenda = [
+        'ide' => [
+            'cUF' => $dadosVenda_cUF = '21', // MA (Maranhão)
+            'cNF' => str_pad(rand(0,99999999), 8, '0', STR_PAD_LEFT),
+            'natOp' => 'VENDA', 'indPag' => 0, 'mod' => '65',
+            'serie' => 1, 'nNF' => (int) date('YmdHis'), 'dhEmi' => date('Y-m-d\TH:i:sP'),
+            'dhSaiEnt' => date('Y-m-d\TH:i:sP'), 'tpNF' => 1, 'idDest' => 1, 'cMunFG' => '3550308',
+            'tpImp' => 1, 'tpEmis' => 1, 'cDV' => 0, 'tpAmb' => 2,
+            'finNFe' => 1, 'indFinal' => 1, 'indPres' => 1, 'procEmi' => 0, 'verProc' => 'PDV-1.0'
+        ],
+        'emit' => [
+            'CNPJ' => $cnpjEmitente,
+            'xNome' => $razaoSocial,
+            'xFant' => $razaoSocial,
+            'enderEmit' => [
+                'xLgr' => 'Av Magalhães de Almeida',
+                'nro' => '745',
+                'xCpl' => '', //Complemento do endereço (Opcional)
+                'xBairro' => 'Centro',
+                'cMun' => '2103604',
+                'xMun' => 'COROATA',
+                'UF' => 'MA',
+                'CEP' => '65415000',
+                'cPais' => '1058',
+                'fone' => '19981658257'
+            ],
+            'IE' => 'ISENTO'
+        ],
+        'dest' => [
+            // Consumidor final (pessoa física) - CPF opcional
+            'CPF' => '',
+            'xNome' => 'CONSUMIDOR'
+        ],
+        'itens' => $itensParaXml,
+        'total' => [
+            'vProd' => number_format(array_sum(array_column($itensParaXml, 'vProd')), 2, '.', ''),
+            'vNF' => number_format($total, 2, '.', ''),
+            'vBC' => 0,
+            'vICMS' => 0
+        ],
+        'pagamentos' => [
+            'Dinheiro'            => '01',
+            'Cartão de Crédito'   => '03',
+            'Cartão de Débito'    => '04',
+            'PIX'                 => '16',
+            'Múltipla'            => '99', // fallback
+        ],
+        'infRespTec' => [
+            'CNPJ' => $cnpjEmitente,
+            'xContato' => 'DIEGO RODRIGUES CRISTALDO',
+            'fone' => '19989909456',
+            'email' => 'diegorcristaldo@hotmail.com'
+        ]
+    ];
+
+    // Monta pagamentos para o XML
+    foreach ($formas_pagamento as $i => $fp) {
+        $valor_pag = isset($valores_pagamento[$i]) ? (float)str_replace(',', '.', $valores_pagamento[$i]) : $total;
+        // mapear forma para tPag conforme NF-e (exemplo)
+        $map = [
+            'Dinheiro' => '01',
+            'Cartão de Crédito' => '03',
+            'Cartão de Débito' => '04',
+            'PIX' => '99',
+        ];
+        $tPag = $map[$fp] ?? '99';
+        $dadosVenda['pagamentos'][] = ['tPag' => $tPag, 'vPag' => $valor_pag];
+    }
+
+    // ---------------- assinatura / envio via NFePHP ----------------
+    // Verifica se vendor/autoload existe
+    if (!file_exists(__DIR__ . '/vendor/autoload.php')) {
+        // informa ao usuário que precisa instalar o composer
+        $_SESSION['flash'] = 'Biblioteca NFePHP não encontrada. Execute: composer require nfephp-org/sped-nfe';
+        header("Location: comprovante.php?id_venda=$venda_id");
+        exit;
+    }
+
+    require __DIR__ . '/vendor/autoload.php';
+
+    try {
+        $configJson = file_get_contents($configJsonPath);
+        $certContent = file_get_contents($pfxPath);
+        $certificate = Certificate::readPfx($certContent, $pfxPassword);
+        $tools = new Tools($configJson, $certificate);
+
+        // Gera XML (não-assinado)
+        $xml = gerarXmlNfce($dadosVenda);
+
+        // Assina
+        $xmlAssinado = $tools->signNFe($xml);
+
+        // salva xml assinado em disco (pasta xmls/autorizacao)
+        if (!is_dir(__DIR__ . '/xmls')) mkdir(__DIR__ . '/xmls', 0750, true);
+        $xmlFileSigned = __DIR__ . '/xmls/venda_' . $venda_id . '_assinado.xml';
+        file_put_contents($xmlFileSigned, $xmlAssinado);
+
+        // Envia lote (idLote aleatório, 15 dígitos)
+        $idLote = str_pad(random_int(1, 999999999), 15, '0', STR_PAD_LEFT);
+        $resp = $tools->sefazEnviaLote([$xmlAssinado], $idLote);
+
+        $st = new Standardize();
+        $std = $st->toStd($resp);
+
+        if (isset($std->cStat) && (string)$std->cStat === '103') {
+            // lote recebido; recupera número de recibo e consulta até protocolo
+            $recibo = (string)$std->infRec->nRec;
+            // aguarda breve e consulta (pode ser necessário aumentar a espera em produção)
+            sleep(2);
+            $consulta = $tools->sefazConsultaRecibo($recibo);
+            $stdCons = $st->toStd($consulta);
+
+            if (isset($stdCons->cStat) && (string)$stdCons->cStat === '100') {
+                // Autorizada
+                $protocolo = (string)$stdCons->infProt->nProt;
+                // tenta extrair chave (infNFe @Id -> 'NFe...chave')
+                $dom = new DOMDocument();
+                $dom->loadXML($xmlAssinado);
+                $infNFe = $dom->getElementsByTagName('infNFe')->item(0);
+                $idAttr = $infNFe ? $infNFe->getAttribute('Id') : null;
+                $chave = null;
+                if ($idAttr && strpos($idAttr, 'NFe') === 0) {
+                    $chave = substr($idAttr, 3);
+                }
+                // salva arquivos autorizados (nfeProc)
+                $nfeProc = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+                // monta nfeProc com xml assinado + retorno de autorizacao (simplificado)
+                $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
+                // salva (você pode montar nfeProc completo concatenando protocolo)
+                $autFile = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
+                file_put_contents($autFile, $nfeProc);
+
+                // tenta armazenar chave/protocolo no banco (se colunas existirem)
+                $updateCols = [];
+                // verificar se coluna existe (opcional, simplificado: tenta executar UPDATE sem fail)
+                try {
+                    $stmtUpd = $conn->prepare("UPDATE vendas SET chave_nfe = ?, protocolo = ?, status_nf = ? WHERE id = ?");
+                    $status_nf = 'AUTORIZADA';
+                    $stmtUpd->bind_param("sssi", $chave, $protocolo, $status_nf, $venda_id);
+                    $stmtUpd->execute();
+                } catch (Exception $e) {
+                    // se as colunas não existirem, apenas ignore (ou crie as colunas no DB)
+                }
+
+                // redireciona para comprovante (ou para impressão do DANFE)
+                header("Location: comprovante.php?id_venda=$venda_id&nf=ok");
+                exit;
+            } else {
+                // não autorizada ainda - salvar recibo para acompanhamento
+                try {
+                    $stmtUpd = $conn->prepare("UPDATE vendas SET protocolo = ?, status_nf = ? WHERE id = ?");
+                    $status_nf = 'PROCESSANDO';
+                    $stmtUpd->bind_param("ssi", $recibo, $status_nf, $venda_id);
+                    $stmtUpd->execute();
+                } catch (Exception $e) {}
+                header("Location: comprovante.php?id_venda=$venda_id&nf=pendente");
+                exit;
+            }
+        } else {
+            // erro no envio do lote
+            $_SESSION['flash'] = 'Erro ao enviar NFC-e: ' . ($std->xMotivo ?? 'erro desconhecido');
+            header("Location: comprovante.php?id_venda=$venda_id");
+            exit;
+        }
+    } catch (Exception $e) {
+        // registra erro e continua (não quebra a venda)
+        $_SESSION['flash'] = 'Erro NFe: ' . $e->getMessage();
+        header("Location: comprovante.php?id_venda=$venda_id");
+        exit;
+    }
 }
 
 $uri = $_SERVER['REQUEST_URI'];
@@ -108,7 +321,7 @@ $lista_links = [
 
 require 'view/header.php';
 
-    ?>
+?>
 <div class="container mt-4">
     <h2>Registrar Venda</h2>
 
@@ -183,300 +396,7 @@ require 'view/header.php';
     </form>
 </div>
 
-<script>
-let produtosAdicionados = {};  // id: preco
-
-document.getElementById('codigo_barras').addEventListener('keydown', function(event) {
-    if (event.key === "Enter") {
-        event.preventDefault();
-        const codigo = this.value.trim();
-        if (codigo !== '') {
-            adicionarProduto(codigo);
-        }
-    }
-});
-
-
-function handleKeyPressBuscaNome(event) {
-    if (event.key === "Enter") {
-        event.preventDefault();
-        buscarProduto();
-    }
-}
-
-function handleKeyPressBuscaId(event) {
-    if (event.key === "Enter") {
-        event.preventDefault();
-        buscarProdutoPorId();
-    }
-}
-
-function adicionarProduto(codigo) {
-    // Garante que o código tenha 13 dígitos, adicionando zeros à esquerda se necessário
-    if (codigo.length < 13) {
-        codigo = codigo.padStart(13, '0');
-    }
-
-    fetch('buscar_produto.php?codigo=' + encodeURIComponent(codigo))
-        .then(res => res.json())
-        .then(produto => {
-            if (!produto || !produto.id) {
-                alert("Produto não encontrado!");
-                return;
-            }
-            incluirProdutoNaVenda(produto);
-            document.getElementById('codigo_barras').value = '';
-        });
-}
-
-function incluirProdutoNaVenda(produto) {
-    const id = produto.id;
-
-    if (produtosAdicionados[id]) {
-        const input = document.getElementById('quantidade-' + id);
-        input.value = parseFloat(input.value) + 1;
-    } else {
-        const container = document.getElementById('lista-produtos');
-        const div = document.createElement('div');
-        div.id = 'produto-' + id;
-        div.className = 'border p-2 rounded mb-2';
-
-        let step = (produto.unidade_medida === 'KG' || produto.unidade_medida === 'LT') ? '0.001' : '1';
-
-        div.innerHTML = `
-            <div class="row align-items-center g-2 mb-2">
-                <div class="col-md-4">
-                    <h5><strong>${produto.nome} (R$ ${parseFloat(produto.preco).toFixed(2)} ${produto.unidade_medida})</strong></h5>
-                </div>
-
-                <div class="col-md-3 d-flex align-items-center">
-                    <span class="input-group-text px-2">Qtd</span>
-                    <input type="number" name="quantidade[${id}]" id="quantidade-${id}" class="form-control form-control-sm" value="1" step="${step}" oninput="atualizarTotal()">
-                </div>
-
-                <div class="col-md-3">
-                    <h5><span>Subtotal: R$ <span id="subtotal-${id}">${parseFloat(produto.preco).toFixed(2)}</span></span></h5>
-                </div>
-
-                <div class="col-md-2">
-                    <button type="button" class="btn btn-sm btn-danger w-100 d-flex align-items-center justify-content-center" onclick="removerProduto(${id})">
-                        <i class="bi bi-trash me-1"></i> Remover
-                    </button>
-                </div>
-            </div>
-        `;
-        container.appendChild(div);
-        produtosAdicionados[id] = parseFloat(produto.preco);
-    }
-
-    atualizarTotal();
-}
-
-function removerProduto(id) {
-    delete produtosAdicionados[id];
-    const div = document.getElementById('produto-' + id);
-    if (div) div.remove();
-    atualizarTotal();
-}
-
-function atualizarTotal() {
-    let total = 0;
-    for (const id in produtosAdicionados) {
-        const preco = produtosAdicionados[id];
-        const qtd = parseFloat(document.getElementById('quantidade-' + id).value) || 0;
-
-        const subtotal = preco * qtd;
-        document.getElementById('subtotal-' + id).innerText = subtotal.toFixed(2);
-
-        if (qtd > 0) {
-            total += subtotal;
-        }
-    }
-    const desconto = parseFloat(document.getElementById('desconto').value) || 0;
-    total = total - desconto;
-    if (total < 0) total = 0;
-    document.getElementById('total').innerText = total.toFixed(2);
-}
-
-function buscarProduto() {
-    const nome = document.getElementById('busca_produto').value.trim();
-    if (nome === '') return;
-
-    fetch('buscar_produto.php?nome=' + encodeURIComponent(nome))
-        .then(res => res.json())
-        .then(produtos => {
-            const resultados = document.getElementById('resultados-busca');
-            resultados.innerHTML = '';
-
-            if (!produtos.length) {
-                resultados.innerHTML = '<div class="alert alert-warning">Nenhum produto encontrado!</div>';
-                return;
-            }
-
-            produtos.forEach(produto => {
-                const div = document.createElement('div');
-                div.className = 'd-flex justify-content-between align-items-center border p-2 mb-1 rounded';
-                div.innerHTML = `
-                    <span class="p-2">${produto.nome} (R$ ${parseFloat(produto.preco).toFixed(2)} - ${produto.unidade_medida})</span>
-                    <button type="button" class="btn btn-sm btn-success" onclick="adicionarProdutoPorId(${produto.id})">Adicionar</button>
-                `;
-                resultados.appendChild(div);
-            });
-        })
-        .catch(err => {
-            alert('Erro: ' + err.message);
-            console.error(err);
-        });
-}
-
-function adicionarProdutoPorId(id) {
-    fetch('buscar_produto.php?id=' + id)
-        .then(res => res.json())
-        .then(produto => {
-            if (!produto || !produto.id) {
-                alert("Produto não encontrado!");
-                return;
-            }
-            incluirProdutoNaVenda(produto);
-            document.getElementById('resultados-busca').innerHTML = ''; // <<< Limpa a lista
-        })
-        .catch(err => {
-            alert('Erro: ' + err.message);
-            console.error(err);
-        });
-}
-
-function buscarProdutoPorId() {
-    const id = document.getElementById('busca_produto_id').value.trim();
-    if (id === '') return;
-
-    fetch('buscar_produto.php?id=' + encodeURIComponent(id))
-        .then(res => res.json())
-        .then(produto => {
-            const resultados = document.getElementById('resultados-busca');
-            resultados.innerHTML = '';
-
-            if (!produto || !produto.id) {
-                resultados.innerHTML = '<div class="alert alert-warning">Produto não encontrado!</div>';
-                return;
-            }
-
-            const div = document.createElement('div');
-            div.className = 'd-flex justify-content-between align-items-center border p-2 mb-1 rounded';
-            div.innerHTML = `
-                <span>${produto.nome} (R$ ${parseFloat(produto.preco).toFixed(2)} - ${produto.unidade_medida})</span>
-                <button type="button" class="btn btn-sm btn-success" onclick="adicionarProdutoPorId(${produto.id})">Adicionar</button>
-            `;
-            resultados.appendChild(div);
-        })
-        .catch(err => {
-            alert('Erro: ' + err.message);
-            console.error(err);
-        });
-}
-
-function confirmarFinalizacao() {
-    if (confirm("Tem certeza que deseja finalizar a venda?")) {
-        document.querySelector('form').submit();
-    }
-}
-
-//Adiciona mais de uma formas de pagamento
-function verificarMultipla(select) {
-  const valorContainer = document.getElementById('valor_total_container');
-  const botaoAdicionar = document.getElementById('botao-adicionar');
-
-  if (select.value === 'Múltipla') {
-    valorContainer.style.display = 'none';
-    botaoAdicionar.style.display = 'block';
-  } else {
-    valorContainer.style.display = 'none'; // escondido porque não precisa informar valor
-    botaoAdicionar.style.display = 'none';
-
-    // Limpa os pagamentos extras
-    document.getElementById('pagamentos-extras').innerHTML = '';
-  }
-}
-
-document.querySelector('select[name="forma_pagamento[]"]').addEventListener('change', verificarDinheiroSelecionado);
-function verificarDinheiroSelecionado() {
-  const selects = document.querySelectorAll('select[name="forma_pagamento[]"]');
-  let temDinheiro = false;
-
-  selects.forEach(sel => {
-    if (sel.value === 'Dinheiro') {
-      temDinheiro = true;
-    }
-  });
-
-  const valorPagoDiv = document.getElementById('valor-pago-div');
-  const trocoDiv = document.getElementById('troco-div');
-
-  if (temDinheiro) {
-    valorPagoDiv.style.display = 'block';
-    trocoDiv.style.display = 'block';
-  } else {
-    valorPagoDiv.style.display = 'none';
-    trocoDiv.style.display = 'none';
-  }
-
-  calcularTroco();
-}
-
-function calcularTroco() {
-    const valorPago = parseFloat(document.getElementById('valor-pago').value) || 0;
-    const total = parseFloat(document.getElementById('total').innerText) || 0;
-    let troco = valorPago - total;
-    if (troco < 0) troco = 0;
-    document.getElementById('troco').innerText = troco.toFixed(2);
-}
-
-function adicionarPagamento() {
-  const container = document.getElementById('pagamentos-extras');
-
-  const div = document.createElement('div');
-  div.classList.add('pagamento-extra');
-  div.style.marginTop = '10px';
-
-  div.innerHTML = `
-    <div class="d-flex flex-row mb-3 mt-3">
-        <select class="form-select" name="forma_pagamento[]" required>
-            <option value="Cartão de Crédito">Cartão de Crédito</option>
-            <option value="Cartão de Débito">Cartão de Débito</option>
-            <option value="PIX">PIX</option>
-            <option value="Dinheiro">Dinheiro</option>
-        </select>
-        <input type="text" name="valor_pago[]" placeholder="Valor pago (R$)" class="form-control" required>
-        <button class="btn btn-danger" type="button" onclick="removerPagamento(this)">Remover</button>
-    </div>
-  `;
-
-  container.appendChild(div);
-
-  // Adiciona o event listener ao novo select
-  const novoSelect = div.querySelector('select');
-  novoSelect.addEventListener('change', verificarDinheiroSelecionado);
-}
-
-function removerPagamento(btn) {
-  btn.parentElement.remove();
-}
-
-//Duplicar página
-document.addEventListener("DOMContentLoaded", function () {
-    const botaoDuplicar = document.getElementById("duplicarPagina");
-    if (botaoDuplicar) {
-        botaoDuplicar.addEventListener("click", function (e) {
-            e.preventDefault(); // evita o comportamento padrão do link
-
-            const urlBase = window.location.href.split('?')[0]; // remove parâmetros
-            const novaUrl = urlBase + '?duplicado=' + new Date().getTime();
-            window.open(novaUrl, '_blank'); // abre nova aba sempre
-        });
-    }
-});
-
-</script>
+<script src="assets/registrar_venda.js"></script>
 
 </body>
 </html>
