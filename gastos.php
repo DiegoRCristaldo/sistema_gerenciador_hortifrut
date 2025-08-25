@@ -90,6 +90,7 @@ require 'view/header.php';
                     <option>Internet</option>
                     <option>Propaganda</option>
                     <option>Segurança</option>
+                    <option>Outros</option>
                 </select>
             </div>
             <div class="col-md-4">

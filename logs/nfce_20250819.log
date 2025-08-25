@@ -1,0 +1,10 @@
+[2025-08-19T01:01:32+00:00] ID 148 - Este XML não é válido. Element '{http://www.portalfiscal.inf.br/nfe}xNome': This element is not expected. Expected is one of ( {http://www.portalfiscal.inf.br/nfe}CNPJ, {http://www.portalfiscal.inf.br/nfe}CPF, {http://www.portalfiscal.inf.br/nfe}idEstrangeiro ).
+
+Element '{http://www.portalfiscal.inf.br/nfe}pag': This element is not expected. Expected is ( {http://www.portalfiscal.inf.br/nfe}transp ).
+
+
+[2025-08-19T01:52:07+00:00] ID 150 - Este XML não é válido. Element '{http://www.portalfiscal.inf.br/nfe}xNome': This element is not expected. Expected is one of ( {http://www.portalfiscal.inf.br/nfe}CNPJ, {http://www.portalfiscal.inf.br/nfe}CPF, {http://www.portalfiscal.inf.br/nfe}idEstrangeiro ).
+
+Element '{http://www.portalfiscal.inf.br/nfe}pag': This element is not expected. Expected is ( {http://www.portalfiscal.inf.br/nfe}transp ).
+
+
