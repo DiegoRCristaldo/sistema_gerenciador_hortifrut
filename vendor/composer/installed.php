@@ -3,7 +3,7 @@
         'name' => 'varejao/pdv-system',
         'pretty_version' => 'dev-master',
         'version' => 'dev-master',
-        'reference' => '6c3b89d0c2a23af708256ddb05b5ebc03ff10967',
+        'reference' => '20cfd6619db413be83a0445cd22b048ac462f064',
         'type' => 'project',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -139,7 +139,7 @@
         'varejao/pdv-system' => array(
             'pretty_version' => 'dev-master',
             'version' => 'dev-master',
-            'reference' => '6c3b89d0c2a23af708256ddb05b5ebc03ff10967',
+            'reference' => '20cfd6619db413be83a0445cd22b048ac462f064',
             'type' => 'project',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

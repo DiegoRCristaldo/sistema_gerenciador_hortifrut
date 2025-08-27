@@ -113,3 +113,13 @@ CREATE TABLE sangrias (
     FOREIGN KEY (caixa_id) REFERENCES caixas(id),
     FOREIGN KEY (operador_id) REFERENCES operadores(id)
 );
+
+CREATE TABLE numeracao_nfe (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    ultimo_numero INT NOT NULL DEFAULT 0,
+    serie INT NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+INSERT INTO numeracao_nfe (ultimo_numero, serie) VALUES (0, 1);

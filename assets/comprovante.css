@@ -3,6 +3,7 @@
         width: 72mm;
         font-size: 12px;
         margin: 0;
+        padding: 0;        
     }
 
     .container {
@@ -45,4 +46,33 @@
     p, li {
         margin: 4px 0;
     }
+
+    /* Estilos específicos para impressão do DANFE para não sobrepor o recibo */
+    .content {
+        display: none; /* Esconde o recibo interno ao imprimir */
+    }
+    .danfe-printable-area {
+        display: block !important; /* Mostra a área do DANFE para impressão */
+        width: 100%;
+        margin: 0 auto;
+        padding: 0;
+    }
+    .d-print-none {
+        display: none !important;
+    }
+}
+
+/* Estilos para o DANFE em tela */
+.danfe-container {
+    border: 1px solid #ccc;
+    padding: 15px;
+    margin-top: 20px;
+    background-color: #fefefe;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    overflow-x: auto; /* Para lidar com larguras de DANFE maiores */
+}
+
+/* Oculta a área do DANFE por padrão, só é exibida para impressão ou se o usuário clicar para ver */
+.danfe-printable-area {
+    display: none;
 }

@@ -1,7 +1,6 @@
 <?php
-// Inclui configurações e classes necessárias
 include 'verifica_login.php';
-include 'config.php'; // Certifique-se de que este arquivo contém as configurações necessárias
+include 'config.php';
 require __DIR__ . '/vendor/autoload.php';
 use NFePHP\NFe\Tools;
 use NFePHP\Common\Certificate;
@@ -13,7 +12,7 @@ if (!isset($_GET['id_venda'])) {
     exit;
 }
 
-$id_venda = intval($_GET['id_venda']);
+$venda_id = intval($_GET['id_venda']);
 $status_nf = $_GET['nf'] ?? null; // 'ok', 'pendente', etc.
 
 // Mensagens de feedback para o usuário
@@ -23,7 +22,7 @@ unset($_SESSION['flash']);
 // Busca informações da venda para o recibo interno
 $sql = "SELECT v.*, o.usuario AS operador
         FROM vendas v LEFT JOIN operadores o ON v.operador_id = o.id
-        WHERE v.id = $id_venda";
+        WHERE v.id = $venda_id";
 $result = $conn->query($sql);
 
 if (!$result) {
@@ -40,11 +39,11 @@ if (!$venda) {
 // Itens da venda para o recibo interno
 $itens = $conn->query("SELECT iv.*, p.nome, p.preco, p.unidade_medida
                        FROM itens_venda iv JOIN produtos p ON iv.produto_id = p.id
-                       WHERE iv.venda_id = $id_venda");
-$pagamentos = $conn->query("SELECT * FROM pagamentos WHERE venda_id = $id_venda");
+                       WHERE iv.venda_id = $venda_id");
+$pagamentos = $conn->query("SELECT * FROM pagamentos WHERE venda_id = $venda_id");
 
 // --- Lógica para geração do DANFE NFC-e (integrada) ---
-$nfe_autorizada_xml_path = __DIR__ . '/xmls/venda_' . $id_venda . '_autorizada.xml';
+$nfe_autorizada_xml_path = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
 $danfe_html = '';
 $danfe_gerado = false;
 
@@ -92,7 +91,25 @@ if (isset($danfe) && $status_nf === 'ok' && file_exists($nfe_autorizada_xml_path
     }
 }
 
-// O cabeçalho HTML para a página
+// No comprovante.php, adicione:
+$nfe_autorizada_xml_path = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
+error_log("Procurando XML em: " . $nfe_autorizada_xml_path);
+
+// Verifique se o arquivo existe
+if (file_exists($nfe_autorizada_xml_path)) {
+    error_log("XML encontrado!");
+} else {
+    error_log("XML NÃO encontrado! Verifique permissões do diretório xmls/");
+}
+
+// No comprovante.php, adicione esta alternativa:
+if (!file_exists($nfe_autorizada_xml_path)) {
+    $xml_assinado_path = __DIR__ . '/xmls/venda_' . $venda_id . '_assinado.xml';
+    if (file_exists($xml_assinado_path)) {
+        $nfe_autorizada_xml_path = $xml_assinado_path;
+        error_log("Usando XML assinado como fallback");
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -103,42 +120,6 @@ if (isset($danfe) && $status_nf === 'ok' && file_exists($nfe_autorizada_xml_path
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="assets/comprovante.css">
     <link rel="stylesheet" href="assets/style.css">
-    <style>
-        /* Estilos específicos para impressão do DANFE para não sobrepor o recibo */
-        @media print {
-            body {
-                margin: 0;
-                padding: 0;
-            }
-            .content {
-                display: none; /* Esconde o recibo interno ao imprimir */
-            }
-            .danfe-printable-area {
-                display: block !important; /* Mostra a área do DANFE para impressão */
-                width: 100%;
-                margin: 0 auto;
-                padding: 0;
-            }
-            .d-print-none {
-                display: none !important;
-            }
-        }
-
-        /* Estilos para o DANFE em tela */
-        .danfe-container {
-            border: 1px solid #ccc;
-            padding: 15px;
-            margin-top: 20px;
-            background-color: #fefefe;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            overflow-x: auto; /* Para lidar com larguras de DANFE maiores */
-        }
-
-        /* Oculta a área do DANFE por padrão, só é exibida para impressão ou se o usuário clicar para ver */
-        .danfe-printable-area {
-            display: none;
-        }
-    </style>
 </head>
 <body>
 
@@ -207,7 +188,7 @@ if (isset($danfe) && $status_nf === 'ok' && file_exists($nfe_autorizada_xml_path
     <?php else: ?>
         <p class="d-print-none">Não foi possível gerar o DANFE para esta venda. Verifique o status da nota acima.</p>
         <?php if ($status_nf === 'pendente'): ?>
-            <p class="d-print-none">Você pode tentar <a href="comprovante.php?id_venda=<?php echo htmlspecialchars($id_venda); ?>&nf=ok">consultar novamente o status da NFC-e</a> se ela já deveria estar autorizada.</p>
+            <p class="d-print-none">Você pode tentar <a href="comprovante.php?id_venda=<?php echo htmlspecialchars($venda_id); ?>&nf=ok">consultar novamente o status da NFC-e</a> se ela já deveria estar autorizada.</p>
         <?php endif; ?>
     <?php endif; ?>
 

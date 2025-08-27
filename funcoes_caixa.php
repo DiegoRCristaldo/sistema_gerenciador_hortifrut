@@ -252,11 +252,27 @@ function gerarXmlNfce($dadosVenda) {
 
     $nfe->tagpag($pagObj);
 
-    // Adiciona detalhes de pagamento (detPag)
+    // Adiciona detalhes de pagamento (detPag) COM SUPORTE PARA CARD
     foreach ($dadosVenda['pagamentos'] as $pag) {
         $detPag = new \stdClass();
         $detPag->tPag = $pag['tPag'];
         $detPag->vPag = number_format($pag['vPag'], 2, '.', '');
+        
+        // ADICIONE ESTA PARTE PARA SUPORTAR A ESTRUTURA CARD
+        if (isset($pag['card'])) {
+            $card = new \stdClass();
+            $card->tpIntegra = $pag['card']['tpIntegra'];
+            
+            // Se for integração TEF (tpIntegra = 1), adiciona campos adicionais
+            if ($pag['card']['tpIntegra'] == 1 && isset($pag['card']['CNPJ'])) {
+                $card->CNPJ = $pag['card']['CNPJ'];
+                $card->tBand = $pag['card']['tBand'];
+                $card->cAut = $pag['card']['cAut'];
+            }
+            
+            $detPag->card = $card;
+        }
+        
         $nfe->tagdetPag($detPag);
     }
     
@@ -271,6 +287,14 @@ function gerarXmlNfce($dadosVenda) {
         $irt->fone = $dadosVenda['infRespTec']['fone'];
         $nfe->taginfRespTec($irt);
     }
+
+    // -----------------------
+    // Informações Suplementares (DANFE NFC-e)
+    // -----------------------
+    $infNFeSupl = new \stdClass();
+    $infNFeSupl->qrCode = 'http://www.hom.nfce.sefaz.ma.gov.br/portal/consultarNFCe.jsp?p=CHAVE|2|2|1|DIGEST_VALUE';
+    $infNFeSupl->urlChave = 'www.sefaz.ma.gov.br/nfce/consulta';
+    $nfe->taginfNFeSupl($infNFeSupl);
 
     return $nfe->getXML();
 }

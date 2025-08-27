@@ -139,14 +139,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $itensParaXml[] = [
             'id' => $produto['id'],
             'cProd' => $produto['id'],
-            'cEAN' => $produto['codigo_barras'] ?? '',
+            'cEAN' => $produto['codigo_barras'] ?? 'SEM GTIN',
             'xProd' => $produto['nome'], 
-            'NCM' => $produto['ncm'] ?? '07099990', // NCM padrão para produtos hortícolas
-            'CFOP' => $produto['cfop'] ?? '5102',   // CFOP padrão para venda dentro do estado
+            'NCM' => $produto['ncm'] ?? '07099990',
+            'CFOP' => $produto['cfop'] ?? '5102',
             'uCom' => $produto['unidade_medida'] ?? 'UN',
             'qCom' => $qtd,
             'vUnCom' => $preco,
             'vProd' => $preco * $qtd,
+            'cEANTrib' => $produto['codigo_barras'] ?? 'SEM GTIN', // ADICIONE ESTA LINHA
+            'uTrib' => $produto['unidade_medida'] ?? 'UN',
+            'qTrib' => $qtd,
+            'vUnTrib' => $preco,
             'indTot' => 1
         ];
     }
@@ -162,19 +166,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         'Dinheiro'          => '01',
         'Cartão de Crédito' => '03',
         'Cartão de Débito'  => '04',
-        'PIX'               => '16', 
+        'PIX'               => '17', 
         'Múltipla'          => '99', 
     ];
 
-    // Geração do nNF (Número da Nota Fiscal). Em produção, deve ser sequencial.
-    $nNF_gerado = random_int(1, 999999999); 
-    $nNF_gerado = str_pad($nNF_gerado, 1, '1', STR_PAD_LEFT); 
+    // Substitua a geração aleatória do nNF por esta abordagem sequencial:
+
+    // Obtém o próximo número sequencial
+    $stmt = $conn->prepare("SELECT ultimo_numero FROM numeracao_nfe WHERE id = 1 FOR UPDATE");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $numeracao = $result->fetch_assoc();
+    $proximo_numero = $numeracao['ultimo_numero'] + 1;
+
+    // Atualiza o contador
+    $stmt_update = $conn->prepare("UPDATE numeracao_nfe SET ultimo_numero = ? WHERE id = 1");
+    $stmt_update->bind_param("i", $proximo_numero);
+    $stmt_update->execute();
+
+    // Usa o número sequencial
+    $nNF_gerado = $proximo_numero;
+
+    // Geração do cNF (Código Numérico da NF) - deve ser aleatório mas único por 1 ano
+    $cNF = str_pad(random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
 
     // Monta o array de dados da venda para o XML da NFC-e.
     $dadosVenda = [
         'ide' => [
             'cUF' => '21', // Código da UF (MA - Maranhão), fixo para o emitente.
-            'cNF' => str_pad(rand(0,99999999), 8, '0', STR_PAD_LEFT), // Código Numérico da NF
+            'cNF' => $cNF, // Usa o cNF gerado acima
             'natOp' => 'VENDA', 'indPag' => 0, 'mod' => '65',
             'serie' => 1, 
             'nNF' => $nNF_gerado,
@@ -182,7 +202,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             'dhSaiEnt' => date('Y-m-d\TH:i:sP'), // Data e hora de saída/entrada com fuso horário
             'tpNF' => 1, 'idDest' => 1, 
             'cMunFG' => $dados['enderecoEmitente']['cMun'], // Código IBGE do município do emitente
-            'tpImp' => 1, 'tpEmis' => 1, 
+            'tpImp' => 4, //Valor 4 - DANFE NFC-e ou 5 - DANFE NFC-e em mensagem eletrônica.
+            'tpEmis' => 1, 
             // A linha 'cDV' foi REMOVIDA para que a NFePHP calcule automaticamente.
             'tpAmb' => 2, // 1 = Produção, 2 = Homologação
             'finNFe' => 1, 'indFinal' => 1, 'indPres' => 1, 'procEmi' => 0, 'verProc' => 'PDV-1.0'
@@ -207,7 +228,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         ],
         'dest' => [ // Dados do destinatário (consumidor)
             'CPF' => '02914577117', // CPF do Diego (PARA TESTE).
-            // 'xNome' e 'indIEDest' NÃO DEVEM ser incluídos aqui em ambiente de produção
+            'xNome' => "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
+            // 'indIEDest' NÃO DEVEM ser incluídos aqui em ambiente de produção
             // se o CPF for informado, a Sefaz pode rejeitar ou sobrescrever.
         ],
         'itens' => $itensParaXml, // Itens da venda para o XML
@@ -228,18 +250,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     ];
 
     // Monta os pagamentos para o XML, preenchendo o array 'pagamentos' em $dadosVenda.
-    $dadosVenda['pagamentos'] = []; 
-    $totalPagoNfce = 0;
+    $dadosVenda['pagamentos'] = [];
+    $totalPagoNfce = 0; // Inicializa aqui
 
     foreach ($formas_pagamento as $i => $fp) {
         $valor_pag = isset($valores_pagamento[$i]) ? (float)str_replace(',', '.', $valores_pagamento[$i]) : $total;
         $tPag = $payment_type_map[$fp] ?? '99'; 
         
-        $dadosVenda['pagamentos'][] = [
+        $pagamento = [
             'tPag' => $tPag, 
             'vPag' => $valor_pag
         ];
         
+        // Adiciona estrutura card para cartão/PIX
+        if (in_array($tPag, ['03', '04', '17'])) {
+            $pagamento['card'] = [
+                'tpIntegra' => 2, // 2 = Não integrado com TEF (POS ou digitação manual)
+                // Para integração TEF automática use tpIntegra=1 e preencha CNPJ, tBand, cAut
+            ];
+        }
+        
+        $dadosVenda['pagamentos'][] = $pagamento;
         $totalPagoNfce += $valor_pag;
     }
 
@@ -270,6 +301,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         // Gera o XML não-assinado.
         $xml = gerarXmlNfce($dadosVenda);
+        error_log("XML GERADO: " . $xml);
         
         // --- ADIÇÃO PARA DIAGNÓSTICO: SALVA O XML GERADO PARA INSPEÇÃO ---
         if (!is_dir(__DIR__ . '/xmls')) mkdir(__DIR__ . '/xmls', 0750, true);
@@ -334,6 +366,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $autFile = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
                 file_put_contents($autFile, $nfeProc);
 
+                // Adicione verificação
+                if (file_exists($autFile)) {
+                    error_log("XML autorizado salvo com sucesso: " . $autFile);
+                } else {
+                    error_log("ERRO: Não foi possível salvar XML autorizado em: " . $autFile);
+                }
+
                 // Atualiza o banco de dados com a chave e protocolo da NFC-e.
                 try {
                     $stmtUpd = $conn->prepare("UPDATE vendas SET chave_nfe = ?, protocolo = ?, status_nf = ? WHERE id = ?");
@@ -347,98 +386,125 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 exit();
 
             } elseif ($cStat === '103' || $cStat === '104') { // Lote Recebido ou Processado (requer consulta por recibo)
+                // VERIFIQUE SE JÁ VEIO AUTORIZADA DIRETAMENTE
+                if (isset($std->protNFe->infProt->cStat) && (string)$std->protNFe->infProt->cStat === '100') {
+                    // NFC-e foi autorizada diretamente - processe como cStat 100
+                    $protocolo = (string)$std->protNFe->infProt->nProt;
+                    $chave = (string)$std->protNFe->infProt->chNFe;
+                    
+                    // ... código de autorização ...
+                    
+                    $_SESSION['flash'] = 'NFC-e Autorizada com sucesso!';
+                    header("Location: comprovante.php?id_venda=$venda_id&nf=ok");
+                    exit();
+                }
+                
                 $recibo = null;
                 
-                // DEBUG: Verificar a estrutura completa da resposta
-                error_log("Estrutura completa do std: " . print_r($std, true));
+                // Método 1: Usando SimpleXML com namespaces
+                $xmlResp = simplexml_load_string($resp);
+                $xmlResp->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
                 
-                // Tenta obter o recibo de diferentes formas possíveis na resposta
-                if (isset($std->infRec->nRec)) {
-                    $recibo = (string)$std->infRec->nRec;
-                    error_log("Recibo encontrado em std->infRec->nRec: " . $recibo);
-                } elseif (isset($std->nRec)) {
-                    $recibo = (string)$std->nRec;
-                    error_log("Recibo encontrado em std->nRec: " . $recibo);
+                // Tenta várias formas de encontrar o recibo
+                $result = $xmlResp->xpath('//nfe:infRec/nfe:nRec');
+                if (!empty($result)) {
+                    $recibo = (string)$result[0];
+                    error_log("Recibo encontrado via SimpleXML XPath: " . $recibo);
                 } else {
-                    // Tentar encontrar o recibo manualmente na resposta XML
-                    $domResp = new DOMDocument();
-                    $domResp->loadXML($resp);
-                    $xpath = new DOMXPath($domResp);
+                    $result = $xmlResp->xpath('//nRec');
+                    if (!empty($result)) {
+                        $recibo = (string)$result[0];
+                        error_log("Recibo encontrado via SimpleXML XPath (sem namespace): " . $recibo);
+                    }
+                }
+                
+                // Método 2: Usando regex como fallback
+                if (!$recibo && preg_match('/<nRec>(\d+)<\/nRec>/', $resp, $matches)) {
+                    $recibo = $matches[1];
+                    error_log("Recibo encontrado via regex: " . $recibo);
+                }
+                
+                // Método 3: Usando DOMDocument como último recurso
+                if (!$recibo) {
+                    $dom = new DOMDocument();
+                    $dom->loadXML($resp);
+                    $xpath = new DOMXPath($dom);
                     $xpath->registerNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
                     
                     $nodes = $xpath->query('//nfe:infRec/nfe:nRec');
                     if ($nodes->length > 0) {
                         $recibo = $nodes->item(0)->nodeValue;
-                        error_log("Recibo encontrado via XPath: " . $recibo);
+                        error_log("Recibo encontrado via DOMDocument XPath: " . $recibo);
                     } else {
                         $nodes = $xpath->query('//nRec');
                         if ($nodes->length > 0) {
                             $recibo = $nodes->item(0)->nodeValue;
-                            error_log("Recibo encontrado via XPath (sem namespace): " . $recibo);
+                            error_log("Recibo encontrado via DOMDocument XPath (sem namespace): " . $recibo);
                         }
                     }
                 }
                 
                 if ($recibo) {
-                    // Salva o recibo no banco de dados.
-                    try {
-                        $stmtUpd = $conn->prepare("UPDATE vendas SET protocolo = ?, status_nf = ? WHERE id = ?");
-                        $status_nf_db = 'PROCESSANDO';
-                        $stmtUpd->bind_param("ssi", $recibo, $status_nf_db, $venda_id);
-                        $stmtUpd->execute();
-                    } catch (Exception $e) { /* Ignora */ }
+                        // Salva o recibo no banco de dados.
+                        try {
+                            $stmtUpd = $conn->prepare("UPDATE vendas SET protocolo = ?, status_nf = ? WHERE id = ?");
+                            $status_nf_db = 'PROCESSANDO';
+                            $stmtUpd->bind_param("ssi", $recibo, $status_nf_db, $venda_id);
+                            $stmtUpd->execute();
+                        } catch (Exception $e) { /* Ignora */ }
 
-                    sleep(2); // Pequena pausa antes de consultar
-                    
-                    try {
-                        $consulta = $tools->sefazConsultaRecibo($recibo);
-                        $stdCons = $st->toStd($consulta);
+                        sleep(2); // Pequena pausa antes de consultar
+                        
+                        try {
+                            $consulta = $tools->sefazConsultaRecibo($recibo);
+                            $stdCons = $st->toStd($consulta);
 
-                        if (isset($stdCons->cStat) && (string)$stdCons->cStat === '100') { // Autorizado após consulta
-                            $protocolo = (string)$stdCons->protNFe->infProt->nProt;
-                            
-                            $dom = new DOMDocument();
-                            $dom->loadXML($xmlAssinado);
-                            $infNFe = $dom->getElementsByTagName('infNFe')->item(0);
-                            $idAttr = $infNFe ? $infNFe->getAttribute('Id') : null;
-                            $chave = $idAttr ? substr($idAttr, 3) : null;
+                            if (isset($stdCons->cStat) && (string)$stdCons->cStat === '100') { // Autorizado após consulta
+                                $protocolo = (string)$stdCons->protNFe->infProt->nProt;
+                                
+                                $dom = new DOMDocument();
+                                $dom->loadXML($xmlAssinado);
+                                $infNFe = $dom->getElementsByTagName('infNFe')->item(0);
+                                $idAttr = $infNFe ? $infNFe->getAttribute('Id') : null;
+                                $chave = $idAttr ? substr($idAttr, 3) : null;
 
-                            $nfeProc = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-                            $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
-                            $nfeProc .= '<protNFe versao="4.00"><infProt><tpAmb>' . $dadosVenda['ide']['tpAmb'] . '</tpAmb><verAplic>' . ($stdCons->protNFe->infProt->verAplic ?? '') . '</verAplic><chNFe>' . $chave . '</chNFe><dhRecbto>' . ($stdCons->protNFe->infProt->dhRecbto ?? '') . '</dhRecbto><nProt>' . $protocolo . '</nProt><digVal>' . ($stdCons->protNFe->infProt->digVal ?? '') . '</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>';
-                            $autFile = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
-                            file_put_contents($autFile, $nfeProc);
+                                $nfeProc = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+                                $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
+                                $nfeProc .= '<protNFe versao="4.00"><infProt><tpAmb>' . $dadosVenda['ide']['tpAmb'] . '</tpAmb><verAplic>' . ($stdCons->protNFe->infProt->verAplic ?? '') . '</verAplic><chNFe>' . $chave . '</chNFe><dhRecbto>' . ($stdCons->protNFe->infProt->dhRecbto ?? '') . '</dhRecbto><nProt>' . $protocolo . '</nProt><digVal>' . ($stdCons->protNFe->infProt->digVal ?? '') . '</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>';
+                                $autFile = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
+                                file_put_contents($autFile, $nfeProc);
 
-                            try {
-                                $stmtUpd = $conn->prepare("UPDATE vendas SET chave_nfe = ?, protocolo = ?, status_nf = ? WHERE id = ?");
-                                $status_nf_db = 'AUTORIZADA';
-                                $stmtUpd->bind_param("sssi", $chave, $protocolo, $status_nf_db, $venda_id);
-                                $stmtUpd->execute();
-                            } catch (Exception $e) { /* Ignora */ }
+                                try {
+                                    $stmtUpd = $conn->prepare("UPDATE vendas SET chave_nfe = ?, protocolo = ?, status_nf = ? WHERE id = ?");
+                                    $status_nf_db = 'AUTORIZADA';
+                                    $stmtUpd->bind_param("sssi", $chave, $protocolo, $status_nf_db, $venda_id);
+                                    $stmtUpd->execute();
+                                } catch (Exception $e) { /* Ignora */ }
 
-                            $_SESSION['flash'] = 'NFC-e Autorizada com sucesso (via consulta)!';
-                            header("Location: comprovante.php?id_venda=$venda_id&nf=ok");
-                            exit();
-                        } else { // Rejeitada na consulta ou ainda processando
-                            $motivo = isset($stdCons->xMotivo) ? (string)$stdCons->xMotivo : 'sem motivo';
-                            $cStatCons = isset($stdCons->cStat) ? (string)$stdCons->cStat : 'N/A';
-                            
-                            $_SESSION['flash'] = 'NFC-e enviada, mas ainda processando ou rejeitada na consulta. Motivo: ' . $motivo . ' (Código: ' . $cStatCons . ')';
+                                $_SESSION['flash'] = 'NFC-e Autorizada com sucesso (via consulta)!';
+                                header("Location: comprovante.php?id_venda=$venda_id&nf=ok");
+                                exit();
+                            } else { // Rejeitada na consulta ou ainda processando
+                                $motivo = isset($stdCons->xMotivo) ? (string)$stdCons->xMotivo : 'sem motivo';
+                                $cStatCons = isset($stdCons->cStat) ? (string)$stdCons->cStat : 'N/A';
+                                
+                                $_SESSION['flash'] = 'NFC-e enviada, mas ainda processando ou rejeitada na consulta. Motivo: ' . $motivo . ' (Código: ' . $cStatCons . ')';
+                                header("Location: comprovante.php?id_venda=$venda_id&nf=pendente");
+                                exit();
+                            }
+                        } catch (Exception $e) {
+                            $_SESSION['flash'] = 'Erro ao consultar recibo: ' . $e->getMessage();
                             header("Location: comprovante.php?id_venda=$venda_id&nf=pendente");
                             exit();
                         }
-                    } catch (Exception $e) {
-                        $_SESSION['flash'] = 'Erro ao consultar recibo: ' . $e->getMessage();
-                        header("Location: comprovante.php?id_venda=$venda_id&nf=pendente");
-                        exit();
-                    }
-                } else { // CStat 103 ou 104 sem recibo
-                    $_SESSION['flash'] = 'Erro NFe: Lote recebido/processado, mas número do recibo não encontrado na resposta da Sefaz. Motivo: ' . ($std->xMotivo ?? 'sem motivo');
+                    } else {
+                    error_log("ESTRUTURA COMPLETA DA RESPOSTA PARA DEBUG: " . $resp);
+                    $_SESSION['flash'] = 'Erro NFe: Lote processado mas número do recibo não encontrado. Estrutura da resposta: ' . htmlspecialchars(substr($resp, 0, 500));
                     header("Location: comprovante.php?id_venda=$venda_id");
                     exit();
                 }
-
-            } else { // Outros cStat de erro
+            }
+             else { 
                 $_SESSION['flash'] = 'Erro ao enviar NFC-e: ' . ($std->xMotivo ?? 'erro desconhecido');
                 $_SESSION['flash'] .= '<br>Verifique o arquivo `xmls/sefaz_response_raw_' . $venda_id . '.xml` para detalhes da resposta da SEFAZ.';
                 header("Location: comprovante.php?id_venda=$venda_id");
