@@ -6,14 +6,14 @@ use NFePHP\NFe\Tools;
 use NFePHP\Common\Certificate;
 use NFePHP\NFe\Factories\DanfeFactory;
 
-
 if (!isset($_GET['id_venda'])) {
     echo "Venda não encontrada.";
     exit;
 }
 
 $venda_id = intval($_GET['id_venda']);
-$status_nf = $_GET['nf'] ?? null; // 'ok', 'pendente', etc.
+$status_nf = $_GET['nf'] ?? null;
+$danfe_path = $_GET['danfe'] ?? null; // Novo: pega o caminho do DANFE
 
 // Mensagens de feedback para o usuário
 $flash_message = $_SESSION['flash'] ?? '';
@@ -42,13 +42,29 @@ $itens = $conn->query("SELECT iv.*, p.nome, p.preco, p.unidade_medida
                        WHERE iv.venda_id = $venda_id");
 $pagamentos = $conn->query("SELECT * FROM pagamentos WHERE venda_id = $venda_id");
 
+// --- VERIFICA SE HÁ DANFE EM PDF ---
+$danfe_pdf_existe = false;
+$danfe_pdf_path = '';
+
+if ($danfe_path && file_exists($danfe_path)) {
+    $danfe_pdf_existe = true;
+    $danfe_pdf_path = $danfe_path;
+} elseif ($status_nf === 'ok') {
+    // Tenta encontrar o DANFE automaticamente
+    $possible_danfe_path = __DIR__ . '/danfes/venda_' . $venda_id . '_danfe.pdf';
+    if (file_exists($possible_danfe_path)) {
+        $danfe_pdf_existe = true;
+        $danfe_pdf_path = $possible_danfe_path;
+    }
+}
+
 // --- Lógica para geração do DANFE NFC-e (integrada) ---
 $nfe_autorizada_xml_path = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
 $danfe_html = '';
 $danfe_gerado = false;
 
-// Tenta gerar o DANFE NFC-e apenas se a NF foi autorizada e NFePHP está disponível
-if (isset($danfe) && $status_nf === 'ok' && file_exists($nfe_autorizada_xml_path)) {
+// Tenta gerar o DANFE HTML apenas se não tiver PDF e se tiver XML
+if (!$danfe_pdf_existe && $status_nf === 'ok' && file_exists($nfe_autorizada_xml_path)) {
     try {
         $xml_nfe = file_get_contents($nfe_autorizada_xml_path);
 
@@ -92,7 +108,7 @@ if (isset($danfe) && $status_nf === 'ok' && file_exists($nfe_autorizada_xml_path
 }
 
 // No comprovante.php, adicione:
-$nfe_autorizada_xml_path = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
+$nfe_autorizada_xml_path = __DIR__ . '/xmls/venda_' . $venda_id . '_assinado.xml';
 error_log("Procurando XML em: " . $nfe_autorizada_xml_path);
 
 // Verifique se o arquivo existe
@@ -116,6 +132,7 @@ if (!file_exists($nfe_autorizada_xml_path)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="assets/logo.png" type="image/png">
     <title>Comprovante de Venda</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="assets/comprovante.css">
@@ -125,7 +142,7 @@ if (!file_exists($nfe_autorizada_xml_path)) {
 
 <div class="container mt-4">
     <?php if ($flash_message): ?>
-        <div class="alert alert-warning" role="alert">
+        <div class="alert alert-info" role="alert">
             <?php echo $flash_message; ?>
         </div>
     <?php endif; ?>
@@ -133,25 +150,28 @@ if (!file_exists($nfe_autorizada_xml_path)) {
     <!-- Recibo de Venda Interno -->
     <div class="content p-3 d-print-block">
         <img src="assets/banner.jpeg" alt="Banner escrito Hortifrut Quero Fruta" class="banner">
-
         <h2>Comprovante de Venda</h2>
         <p><strong>ID da Venda:</strong> <?= $venda['id'] ?></p>
         <p><strong>Data:</strong> <?= date('d/m/Y H:i', strtotime($venda['data'])) ?></p>
+        
+        <?php if ($pagamentos->num_rows > 0): ?>
         <p><strong>Formas de Pagamento:</strong></p>
         <ul>
-            <?php mysqli_data_seek($pagamentos, 0); // Garante que o ponteiro volte ao início para reuso ?>
+            <?php mysqli_data_seek($pagamentos, 0); ?>
             <?php while ($pg = $pagamentos->fetch_assoc()): ?>
                 <li><?= htmlspecialchars($pg['forma_pagamento']) ?>: R$ <?= number_format($pg['valor_pago'], 2, ',', '.') ?></li>
             <?php endwhile; ?>
         </ul>
+        <?php else: ?>
+        <p><strong>Forma de Pagamento:</strong> <?= htmlspecialchars($venda['forma_pagamento']) ?></p>
+        <?php endif; ?>
+        
         <p><strong>Operador:</strong> <?= $_SESSION['usuario'] ?></p>
-
         <hr>
-
         <h6>Itens da Venda:</h6>
         <span>| Produto | Qtd | Unit | Total |</span>
         <?php
-        mysqli_data_seek($itens, 0); // Garante que o ponteiro volte ao início
+        mysqli_data_seek($itens, 0);
         while ($item = $itens->fetch_assoc()):
             $qtd = rtrim(rtrim(number_format((float)$item['quantidade'], 3, ',', '.'), '0'), ',');
             $unit = number_format($item['preco'], 2, ',', '.');
@@ -162,7 +182,6 @@ if (!file_exists($nfe_autorizada_xml_path)) {
                 <span class="d-flex justify-content-end"><?= $qtd ?> (Qtd) <?= $unit ?> (<?= $item['unidade_medida'] ?>) R$ <?= $total ?></span>
             </div>
         <?php endwhile; ?>
-
         <p class="d-flex justify-content-end total"><strong>TOTAL: R$ <?= number_format($venda['total'], 2, ',', '.') ?></strong></p>
     </div>
 
@@ -170,32 +189,43 @@ if (!file_exists($nfe_autorizada_xml_path)) {
 
     <!-- Seção do DANFE NFC-e -->
     <h3 class="d-print-none">Status da Nota Fiscal Eletrônica</h3>
-    <p class="d-print-none">Status da NFC-e: <strong><?php echo htmlspecialchars($status_nf === 'ok' ? 'Autorizada' : ($status_nf === 'pendente' ? 'Processando' : 'Não Autorizada/Erro')); ?></strong></p>
+    <p class="d-print-none">Status da NFC-e: <strong class="text-success">AUTORIZADA</strong></p>
 
-    <?php if ($danfe_gerado): ?>
+    <?php if ($danfe_pdf_existe): ?>
+        <!-- DANFE em PDF disponível -->
+        <div class="mt-3 d-print-none">
+            <h4>DANFE NFC-e (PDF)</h4>
+            <a href="<?= $danfe_pdf_path ?>" target="_blank" class="btn btn-success">
+                📄 Visualizar DANFE NFC-e
+            </a>
+            <a href="<?= $danfe_pdf_path ?>" download class="btn btn-primary">
+                ⬇️ Baixar DANFE
+            </a>
+            <p class="text-muted mt-2">O DANFE foi gerado com sucesso em formato PDF.</p>
+        </div>
+    <?php elseif ($danfe_gerado): ?>
+        <!-- DANFE em HTML (fallback) -->
         <h3 class="d-print-none">DANFE NFC-e</h3>
         <div class="danfe-container border p-3 mb-3 d-print-none">
-            <!-- O DANFE HTML será inserido aqui para visualização em tela -->
             <button class="btn btn-info mb-2" onclick="toggleDanfeVisibility()">Ver/Ocultar DANFE Completo</button>
             <div id="danfe-visualizacao" style="display: none;">
                 <?php echo $danfe_html; ?>
             </div>
         </div>
-        <!-- Área oculta para impressão, que será visível apenas no @media print -->
-        <div class="danfe-printable-area" style="display: none;">
-            <?php echo $danfe_html; ?>
-        </div>
     <?php else: ?>
-        <p class="d-print-none">Não foi possível gerar o DANFE para esta venda. Verifique o status da nota acima.</p>
-        <?php if ($status_nf === 'pendente'): ?>
-            <p class="d-print-none">Você pode tentar <a href="comprovante.php?id_venda=<?php echo htmlspecialchars($venda_id); ?>&nf=ok">consultar novamente o status da NFC-e</a> se ela já deveria estar autorizada.</p>
-        <?php endif; ?>
+        <!-- DANFE não disponível -->
+        <div class="alert alert-warning d-print-none">
+            <strong>DANFE não disponível:</strong> O documento auxiliar da NFC-e não pôde ser gerado.
+            <?php if ($status_nf === 'ok'): ?>
+                <br>Contate o administrador do sistema para verificar a configuração do DANFE.
+            <?php endif; ?>
+        </div>
     <?php endif; ?>
 
     <div class="text-center mt-3 d-print-none">
         <a href="registrar_venda.php" class="btn btn-primary">Nova Venda</a>
         <a href="index.php" class="btn btn-secondary">← Voltar ao Painel</a>
-        <button onclick="window.print()" class="btn btn-secondary">Imprimir Comprovante/NFe</button>
+        <button onclick="window.print()" class="btn btn-secondary">Imprimir Comprovante</button>
     </div>
 </div>
 

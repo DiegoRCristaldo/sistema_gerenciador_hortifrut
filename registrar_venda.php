@@ -2,24 +2,12 @@
 use NFePHP\NFe\Tools;
 use NFePHP\Common\Certificate;
 use NFePHP\NFe\Common\Standardize;
+use NFePHP\DA\NFe\Danfce;
 
 include 'verifica_login.php';
 include 'config.php'; 
-
-// --- DEBUG PARA VERIFICAR O CONTEÚDO BRUTO DE funcoes_caixa.php NO DISCO ---
-// Isso nos ajudará a confirmar se a versão EXATA do arquivo está sendo carregada no DISCO.
-$funcoesCaixaContent = file_get_contents(__DIR__ . '/funcoes_caixa.php');
-if (strpos($funcoesCaixaContent, '// VERIFICACAO_FINAL_20250824_2045') === false) { // Atualizado para o novo identificador
-    echo "<pre>ERRO CRÍTICO: O arquivo funcoes_caixa.php carregado NO DISCO NÃO É A VERSÃO MAIS RECENTE!
-Por favor, verifique se você copiou o código do Canvas 'Atualização FINAL para funcoes_caixa.php' **COMPLETAMENTE** para seu arquivo funcoes_caixa.php, salvou, e reiniciou o servidor.
-Se o problema persistir, pode haver um problema de cache do servidor ou múltiplas cópias do arquivo.
-Conteúdo carregado de funcoes_caixa.php (primeiras 25 linhas):
-" . htmlspecialchars(implode("\n", array_slice(explode("\n", $funcoesCaixaContent), 0, 25))) . "</pre>";
-    exit();
-}
-// --- FIM DO DEBUG NO DISCO ---
-
-include 'funcoes_caixa.php'; // Inclui a versão de funcoes_caixa.php que foi verificada acima
+require 'nfe_service.php';
+include 'funcoes_caixa.php'; 
 
 // Define o fuso horário padrão do PHP. Essencial para dhEmi e dhSaiEnt no XML.
 date_default_timezone_set('America/Sao_Paulo'); 
@@ -282,7 +270,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     $dadosVenda['troco'] = $trocoNfce;
 
-    // --- Início do processo de assinatura và envio via NFePHP ---
+// --- Início do processo de assinatura e envio via NFePHP ---
     if (!file_exists(__DIR__ . '/vendor/autoload.php')) {
         $_SESSION['flash'] = 'Biblioteca NFePHP não encontrada. Execute: composer require nfephp-org/sped-nfe';
         header("Location: comprovante.php?id_venda=$venda_id");
@@ -303,11 +291,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $xml = gerarXmlNfce($dadosVenda);
         error_log("XML GERADO: " . $xml);
         
-        // --- ADIÇÃO PARA DIAGNÓSTICO: SALVA O XML GERADO PARA INSPEÇÃO ---
+        // Salva o XML gerado para inspeção
         if (!is_dir(__DIR__ . '/xmls')) mkdir(__DIR__ . '/xmls', 0750, true);
         file_put_contents(__DIR__ . '/xmls/last_generated_nfce.xml', $xml);
-        error_log("XML gerado para NFC-e (para debug): " . $xml); // Log to PHP error log as well
-        // --- FIM DA ADIÇÃO PARA DIAGNÓSTICO ---
 
         // Assina o XML.
         $xmlAssinado = $tools->signNFe($xml);
@@ -316,211 +302,250 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $xmlFileSigned = __DIR__ . '/xmls/venda_' . $venda_id . '_assinado.xml';
         file_put_contents($xmlFileSigned, $xmlAssinado);
 
-        // Envia o lote para a SEFAZ. O último parâmetro '1' indica envio síncrono.
+        // Envia o lote para a SEFAZ (síncrono)
         $idLote = str_pad(random_int(1, 999999999), 15, '0', STR_PAD_LEFT);
-        $resp = $tools->sefazEnviaLote([$xmlAssinado], $idLote, 1); // Alterado para 1 (síncrono)
+        $resp = $tools->sefazEnviaLote([$xmlAssinado], $idLote, 1);
 
         // Salva a resposta bruta da SEFAZ para diagnóstico.
         file_put_contents(__DIR__ . '/xmls/sefaz_response_raw_' . $venda_id . '.xml', $resp);
         
-        // --- DEBUG DETALHADO DA RESPOSTA ---
-        error_log("Resposta bruta da SEFAZ: " . $resp);
-        $dom = new DOMDocument();
-        $dom->loadXML($resp);
-        $xpath = new DOMXPath($dom);
-        $xpath->registerNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
-        
-        // Tenta encontrar o recibo de várias formas
-        $nRec = $xpath->evaluate('string(//nfe:infRec/nfe:nRec)');
-        if (empty($nRec)) {
-            $nRec = $xpath->evaluate('string(//nRec)');
-        }
-        if (empty($nRec)) {
-            $nRec = $xpath->evaluate('string(//*[local-name()="nRec"])');
-        }
-        
-        error_log("nRec encontrado: " . ($nRec ?: 'NÃO ENCONTRADO'));
-        error_log("Estrutura completa da resposta: " . $dom->saveXML());
-        // --- FIM DEBUG ---
-
+        // Processa a resposta da SEFAZ
         $st = new Standardize();
-        $std = $st->toStd($resp);
+        
+        // Remove o envelope SOAP para obter o XML puro
+        $xmlResp = simplexml_load_string($resp);
+        $namespaces = $xmlResp->getNamespaces(true);
+        $body = $xmlResp->children($namespaces['soap'])->Body;
+        $nfeResultMsg = $body->children('http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4')->nfeResultMsg;
+        $retEnviNFe = $nfeResultMsg->children('http://www.portalfiscal.inf.br/nfe')->retEnviNFe;
+        
+        // Converte para XML string para processamento
+        $xmlPure = $retEnviNFe->asXML();
+        error_log("XML puro da resposta: " . $xmlPure);
+        
+        $std = $st->toStd($xmlPure);
 
-        // Processa a resposta da SEFAZ.
+        // Processa a resposta da SEFAZ
         if (isset($std->cStat)) {
             $cStat = (string)$std->cStat;
 
-            if ($cStat === '100') { // NFC-e Autorizada
+            if ($cStat === '100' || (isset($std->protNFe->infProt->cStat) && (string)$std->protNFe->infProt->cStat === '100')) {
+                // NFC-e Autorizada
                 $protocolo = (string)$std->protNFe->infProt->nProt;
+                $chave = (string)$std->protNFe->infProt->chNFe;
                 
-                $dom = new DOMDocument();
-                $dom->loadXML($xmlAssinado);
-                $infNFe = $dom->getElementsByTagName('infNFe')->item(0);
-                $idAttr = $infNFe ? $infNFe->getAttribute('Id') : null;
-                $chave = $idAttr ? substr($idAttr, 3) : null;
-                
-                // Monta e salva o nfeProc (XML assinado + protocolo de autorização).
+                // Monta e salva o nfeProc
                 $nfeProc = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
                 $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
                 $nfeProc .= '<protNFe versao="4.00"><infProt><tpAmb>' . $dadosVenda['ide']['tpAmb'] . '</tpAmb><verAplic>' . ($std->protNFe->infProt->verAplic ?? '') . '</verAplic><chNFe>' . $chave . '</chNFe><dhRecbto>' . ($std->protNFe->infProt->dhRecbto ?? '') . '</dhRecbto><nProt>' . $protocolo . '</nProt><digVal>' . ($std->protNFe->infProt->digVal ?? '') . '</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>';
+                
                 $autFile = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
                 file_put_contents($autFile, $nfeProc);
 
-                // Adicione verificação
-                if (file_exists($autFile)) {
-                    error_log("XML autorizado salvo com sucesso: " . $autFile);
-                } else {
-                    error_log("ERRO: Não foi possível salvar XML autorizado em: " . $autFile);
-                }
-
-                // Atualiza o banco de dados com a chave e protocolo da NFC-e.
+                // Atualiza o banco
                 try {
                     $stmtUpd = $conn->prepare("UPDATE vendas SET chave_nfe = ?, protocolo = ?, status_nf = ? WHERE id = ?");
                     $status_nf_db = 'AUTORIZADA';
                     $stmtUpd->bind_param("sssi", $chave, $protocolo, $status_nf_db, $venda_id);
                     $stmtUpd->execute();
-                } catch (Exception $e) { /* Ignora erros de atualização do DB */ }
+                } catch (Exception $e) {
+                    error_log("Erro ao atualizar banco: " . $e->getMessage());
+                }
 
-                $_SESSION['flash'] = 'NFC-e Autorizada com sucesso!';
-                header("Location: comprovante.php?id_venda=$venda_id&nf=ok");
-                exit();
+                // GERA O DANFCE - Configurado corretamente para NFC-e
+                try {
+                    // Caminho para o logo (ajuste conforme sua estrutura)
+                    $logoPath = realpath(__DIR__ . '/assets/logo.png');
+                    if (!file_exists($logoPath)) {
+                        // Se não tiver logo, use null
+                        $logoPath = null;
+                    }
+                    
+                    // Cria o DANFCE com configurações específicas para NFC-e
+                    $danfce = new Danfce($xmlAssinado);
+                    
+                    // Configurações do DANFCE (igual ao exemplo)
+                    $danfce->debugMode(false); // false em produção
+                    $danfce->setPaperWidth(80); // largura do papel em mm (max=80, min=58)
+                    $danfce->setMargins(2); // margens
+                    $danfce->setDefaultFont('arial'); // fonte pode ser 'times' ou 'arial'
+                    $danfce->setOffLineDoublePrint(false); // false para NFC-e online
+                    
+                    // Adiciona créditos do integrador (opcional)
+                    $danfce->creditsIntegratorFooter('Sistema PDV - Hortifruti');
+                    
+                    // Renderiza o PDF
+                    $pdfData = $danfce->render($logoPath);
+                    
+                    // Salva o DANFE em PDF
+                    $pdfFile = __DIR__ . '/danfes/venda_' . $venda_id . '_danfe.pdf';
+                    if (!is_dir(__DIR__ . '/danfes')) {
+                        mkdir(__DIR__ . '/danfes', 0755, true);
+                    }
+                    file_put_contents($pdfFile, $pdfData);
+                    
+                    $_SESSION['flash'] = 'NFC-e Autorizada com sucesso! DANFE gerado.';
+                    header("Location: comprovante.php?id_venda=$venda_id&nf=ok&danfe=" . urlencode($pdfFile));
+                    exit();
+                    
+                } catch (Exception $e) {
+                    error_log("Erro ao gerar DANFCE: " . $e->getMessage());
+                    
+                    // Mesmo sem DANFE, a NFC-e foi autorizada
+                    $_SESSION['flash'] = 'NFC-e Autorizada com sucesso! (Erro técnico no DANFE: ' . $e->getMessage() . ')';
+                    header("Location: comprovante.php?id_venda=$venda_id&nf=ok");
+                    exit();
+                }
 
-            } elseif ($cStat === '103' || $cStat === '104') { // Lote Recebido ou Processado (requer consulta por recibo)
-                // VERIFIQUE SE JÁ VEIO AUTORIZADA DIRETAMENTE
+            } elseif ($cStat === '103' || $cStat === '104') {
+                // VERIFICA SE JÁ VEIO AUTORIZADA DIRETAMENTE NO protNFe
                 if (isset($std->protNFe->infProt->cStat) && (string)$std->protNFe->infProt->cStat === '100') {
                     // NFC-e foi autorizada diretamente - processe como cStat 100
                     $protocolo = (string)$std->protNFe->infProt->nProt;
                     $chave = (string)$std->protNFe->infProt->chNFe;
                     
-                    // ... código de autorização ...
+                    // Monta e salva o nfeProc
+                    $nfeProc = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+                    $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
+                    $nfeProc .= '<protNFe versao="4.00"><infProt><tpAmb>' . $dadosVenda['ide']['tpAmb'] . '</tpAmb><verAplic>' . ($std->protNFe->infProt->verAplic ?? '') . '</verAplic><chNFe>' . $chave . '</chNFe><dhRecbto>' . ($std->protNFe->infProt->dhRecbto ?? '') . '</dhRecbto><nProt>' . $protocolo . '</nProt><digVal>' . ($std->protNFe->infProt->digVal ?? '') . '</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>';
                     
-                    $_SESSION['flash'] = 'NFC-e Autorizada com sucesso!';
-                    header("Location: comprovante.php?id_venda=$venda_id&nf=ok");
-                    exit();
-                }
-                
-                $recibo = null;
-                
-                // Método 1: Usando SimpleXML com namespaces
-                $xmlResp = simplexml_load_string($resp);
-                $xmlResp->registerXPathNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
-                
-                // Tenta várias formas de encontrar o recibo
-                $result = $xmlResp->xpath('//nfe:infRec/nfe:nRec');
-                if (!empty($result)) {
-                    $recibo = (string)$result[0];
-                    error_log("Recibo encontrado via SimpleXML XPath: " . $recibo);
-                } else {
-                    $result = $xmlResp->xpath('//nRec');
-                    if (!empty($result)) {
-                        $recibo = (string)$result[0];
-                        error_log("Recibo encontrado via SimpleXML XPath (sem namespace): " . $recibo);
-                    }
-                }
-                
-                // Método 2: Usando regex como fallback
-                if (!$recibo && preg_match('/<nRec>(\d+)<\/nRec>/', $resp, $matches)) {
-                    $recibo = $matches[1];
-                    error_log("Recibo encontrado via regex: " . $recibo);
-                }
-                
-                // Método 3: Usando DOMDocument como último recurso
-                if (!$recibo) {
-                    $dom = new DOMDocument();
-                    $dom->loadXML($resp);
-                    $xpath = new DOMXPath($dom);
-                    $xpath->registerNamespace('nfe', 'http://www.portalfiscal.inf.br/nfe');
-                    
-                    $nodes = $xpath->query('//nfe:infRec/nfe:nRec');
-                    if ($nodes->length > 0) {
-                        $recibo = $nodes->item(0)->nodeValue;
-                        error_log("Recibo encontrado via DOMDocument XPath: " . $recibo);
-                    } else {
-                        $nodes = $xpath->query('//nRec');
-                        if ($nodes->length > 0) {
-                            $recibo = $nodes->item(0)->nodeValue;
-                            error_log("Recibo encontrado via DOMDocument XPath (sem namespace): " . $recibo);
-                        }
-                    }
-                }
-                
-                if ($recibo) {
-                        // Salva o recibo no banco de dados.
-                        try {
-                            $stmtUpd = $conn->prepare("UPDATE vendas SET protocolo = ?, status_nf = ? WHERE id = ?");
-                            $status_nf_db = 'PROCESSANDO';
-                            $stmtUpd->bind_param("ssi", $recibo, $status_nf_db, $venda_id);
-                            $stmtUpd->execute();
-                        } catch (Exception $e) { /* Ignora */ }
+                    $autFile = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
+                    file_put_contents($autFile, $nfeProc);
 
-                        sleep(2); // Pequena pausa antes de consultar
+                    // Atualiza o banco de dados
+                    try {
+                        $stmtUpd = $conn->prepare("UPDATE vendas SET chave_nfe = ?, protocolo = ?, status_nf = ? WHERE id = ?");
+                        $status_nf_db = 'AUTORIZADA';
+                        $stmtUpd->bind_param("sssi", $chave, $protocolo, $status_nf_db, $venda_id);
+                        $stmtUpd->execute();
+                    } catch (Exception $e) {
+                        error_log("Erro ao atualizar banco: " . $e->getMessage());
+                    }
+
+                    // GERA O DANFE
+                    try {
+                        $danfe = new Danfce($nfeProc);
+                        $danfe->montaDANFE();
+                        $pdfData = $danfe->render();
                         
-                        try {
-                            $consulta = $tools->sefazConsultaRecibo($recibo);
-                            $stdCons = $st->toStd($consulta);
+                        // Salva o DANFE em PDF
+                        $pdfFile = __DIR__ . '/danfes/venda_' . $venda_id . '_danfe.pdf';
+                        if (!is_dir(__DIR__ . '/danfes')) {
+                            mkdir(__DIR__ . '/danfes', 0755, true);
+                        }
+                        file_put_contents($pdfFile, $pdfData);
+                        
+                        $_SESSION['flash'] = 'NFC-e Autorizada com sucesso! DANFE gerado.';
+                        header("Location: comprovante.php?id_venda=$venda_id&nf=ok&danfe=" . urlencode($pdfFile));
+                        exit();
+                        
+                    } catch (Exception $e) {
+                        error_log("Erro ao gerar DANFE: " . $e->getMessage());
+                        $_SESSION['flash'] = 'NFC-e Autorizada, mas erro ao gerar DANFE: ' . $e->getMessage();
+                        header("Location: comprovante.php?id_venda=$venda_id&nf=ok");
+                        exit();
+                    }
+                }
+                
+                // Se não veio autorizada, então procura o nRec para consulta
+                $nRec = null;
+                if (isset($std->infRec->nRec)) {
+                    $nRec = (string)$std->infRec->nRec;
+                }
+                    
+                if ($nRec) {
+                    // Salva o recibo no banco de dados
+                    try {
+                        $stmtUpd = $conn->prepare("UPDATE vendas SET protocolo = ?, status_nf = ? WHERE id = ?");
+                        $status_nf_db = 'PROCESSANDO';
+                        $stmtUpd->bind_param("ssi", $nRec, $status_nf_db, $venda_id);
+                        $stmtUpd->execute();
+                    } catch (Exception $e) {
+                        error_log("Erro ao atualizar banco: " . $e->getMessage());
+                    }
 
-                            if (isset($stdCons->cStat) && (string)$stdCons->cStat === '100') { // Autorizado após consulta
-                                $protocolo = (string)$stdCons->protNFe->infProt->nProt;
+                    sleep(2); // Pequena pausa antes de consultar
+                    
+                    try {
+                        $consulta = $tools->sefazConsultaRecibo($nRec);
+                        $stdCons = $st->toStd($consulta);
+
+                        if (isset($stdCons->cStat) && (string)$stdCons->cStat === '100') { // Autorizado após consulta
+                            $protocolo = (string)$stdCons->protNFe->infProt->nProt;
+                            $chave = (string)$stdCons->protNFe->infProt->chNFe;
+
+                            $nfeProc = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+                            $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
+                            $nfeProc .= '<protNFe versao="4.00"><infProt><tpAmb>' . $dadosVenda['ide']['tpAmb'] . '</tpAmb><verAplic>' . ($stdCons->protNFe->infProt->verAplic ?? '') . '</verAplic><chNFe>' . $chave . '</chNFe><dhRecbto>' . ($stdCons->protNFe->infProt->dhRecbto ?? '') . '</dhRecbto><nProt>' . $protocolo . '</nProt><digVal>' . ($stdCons->protNFe->infProt->digVal ?? '') . '</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>';
+                            
+                            $autFile = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
+                            file_put_contents($autFile, $nfeProc);
+
+                            // Atualiza o banco de dados
+                            try {
+                                $stmtUpd = $conn->prepare("UPDATE vendas SET chave_nfe = ?, protocolo = ?, status_nf = ? WHERE id = ?");
+                                $status_nf_db = 'AUTORIZADA';
+                                $stmtUpd->bind_param("sssi", $chave, $protocolo, $status_nf_db, $venda_id);
+                                $stmtUpd->execute();
+                            } catch (Exception $e) {
+                                error_log("Erro ao atualizar banco: " . $e->getMessage());
+                            }
+
+                            // GERA O DANFE
+                            try {
+                                $danfe = new Danfce($nfeProc);
+                                $danfe->montaDANFE();
+                                $pdfData = $danfe->render();
                                 
-                                $dom = new DOMDocument();
-                                $dom->loadXML($xmlAssinado);
-                                $infNFe = $dom->getElementsByTagName('infNFe')->item(0);
-                                $idAttr = $infNFe ? $infNFe->getAttribute('Id') : null;
-                                $chave = $idAttr ? substr($idAttr, 3) : null;
-
-                                $nfeProc = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-                                $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
-                                $nfeProc .= '<protNFe versao="4.00"><infProt><tpAmb>' . $dadosVenda['ide']['tpAmb'] . '</tpAmb><verAplic>' . ($stdCons->protNFe->infProt->verAplic ?? '') . '</verAplic><chNFe>' . $chave . '</chNFe><dhRecbto>' . ($stdCons->protNFe->infProt->dhRecbto ?? '') . '</dhRecbto><nProt>' . $protocolo . '</nProt><digVal>' . ($stdCons->protNFe->infProt->digVal ?? '') . '</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>';
-                                $autFile = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
-                                file_put_contents($autFile, $nfeProc);
-
-                                try {
-                                    $stmtUpd = $conn->prepare("UPDATE vendas SET chave_nfe = ?, protocolo = ?, status_nf = ? WHERE id = ?");
-                                    $status_nf_db = 'AUTORIZADA';
-                                    $stmtUpd->bind_param("sssi", $chave, $protocolo, $status_nf_db, $venda_id);
-                                    $stmtUpd->execute();
-                                } catch (Exception $e) { /* Ignora */ }
-
-                                $_SESSION['flash'] = 'NFC-e Autorizada com sucesso (via consulta)!';
+                                // Salva o DANFE em PDF
+                                $pdfFile = __DIR__ . '/danfes/venda_' . $venda_id . '_danfe.pdf';
+                                if (!is_dir(__DIR__ . '/danfes')) {
+                                    mkdir(__DIR__ . '/danfes', 0755, true);
+                                }
+                                file_put_contents($pdfFile, $pdfData);
+                                
+                                $_SESSION['flash'] = 'NFC-e Autorizada com sucesso (via consulta)! DANFE gerado.';
+                                header("Location: comprovante.php?id_venda=$venda_id&nf=ok&danfe=" . urlencode($pdfFile));
+                                exit();
+                                
+                            } catch (Exception $e) {
+                                error_log("Erro ao gerar DANFE: " . $e->getMessage());
+                                $_SESSION['flash'] = 'NFC-e Autorizada, mas erro ao gerar DANFE: ' . $e->getMessage();
                                 header("Location: comprovante.php?id_venda=$venda_id&nf=ok");
                                 exit();
-                            } else { // Rejeitada na consulta ou ainda processando
-                                $motivo = isset($stdCons->xMotivo) ? (string)$stdCons->xMotivo : 'sem motivo';
-                                $cStatCons = isset($stdCons->cStat) ? (string)$stdCons->cStat : 'N/A';
-                                
-                                $_SESSION['flash'] = 'NFC-e enviada, mas ainda processando ou rejeitada na consulta. Motivo: ' . $motivo . ' (Código: ' . $cStatCons . ')';
-                                header("Location: comprovante.php?id_venda=$venda_id&nf=pendente");
-                                exit();
                             }
-                        } catch (Exception $e) {
-                            $_SESSION['flash'] = 'Erro ao consultar recibo: ' . $e->getMessage();
+                        } else {
+                            $motivo = isset($stdCons->xMotivo) ? (string)$stdCons->xMotivo : 'sem motivo';
+                            $cStatCons = isset($stdCons->cStat) ? (string)$stdCons->cStat : 'N/A';
+                            
+                            $_SESSION['flash'] = 'NFC-e enviada, mas ainda processando ou rejeitada na consulta. Motivo: ' . $motivo . ' (Código: ' . $cStatCons . ')';
                             header("Location: comprovante.php?id_venda=$venda_id&nf=pendente");
                             exit();
                         }
-                    } else {
-                    error_log("ESTRUTURA COMPLETA DA RESPOSTA PARA DEBUG: " . $resp);
-                    $_SESSION['flash'] = 'Erro NFe: Lote processado mas número do recibo não encontrado. Estrutura da resposta: ' . htmlspecialchars(substr($resp, 0, 500));
+                    } catch (Exception $e) {
+                        $_SESSION['flash'] = 'Erro ao consultar recibo: ' . $e->getMessage();
+                        header("Location: comprovante.php?id_venda=$venda_id&nf=pendente");
+                        exit();
+                    }
+                } else {
+                    $_SESSION['flash'] = 'Erro NFe: Lote processado mas número do recibo não encontrado.';
                     header("Location: comprovante.php?id_venda=$venda_id");
                     exit();
                 }
-            }
-             else { 
+            } else {
                 $_SESSION['flash'] = 'Erro ao enviar NFC-e: ' . ($std->xMotivo ?? 'erro desconhecido');
-                $_SESSION['flash'] .= '<br>Verifique o arquivo `xmls/sefaz_response_raw_' . $venda_id . '.xml` para detalhes da resposta da SEFAZ.';
                 header("Location: comprovante.php?id_venda=$venda_id");
                 exit();
             }
-        } else { // Resposta da SEFAZ incompleta
-            $_SESSION['flash'] = 'Erro NFe: Resposta da Sefaz incompleta ou inválida. Não foi possível determinar o cStat.';
-            $_SESSION['flash'] .= '<br>Verifique o arquivo `xmls/sefaz_response_raw_' . $venda_id . '.xml` para detalhes da resposta da SEFAZ.';
+        } else {
+            $_SESSION['flash'] = 'Erro NFe: Resposta da Sefaz incompleta ou inválida.';
             header("Location: comprovante.php?id_venda=$venda_id");
             exit();
         }
-    } catch (Exception $e) { // Erros gerais de exceção
+    } catch (Exception $e) {
         $_SESSION['flash'] = 'Erro NFe: ' . $e->getMessage();
-        $_SESSION['flash'] .= '<br>Verifique o log de erros do seu servidor PHP para mais detalhes.';
         header("Location: comprovante.php?id_venda=$venda_id");
-        exit(); 
+        exit();
     }
 }
 

@@ -2,6 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" href="assets/logo.png" type="image/png">
     <title>Hortifrut Quero Fruta</title>
     <link rel="stylesheet" href="assets/style.css">
     <!-- Bootstrap CSS -->

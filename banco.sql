@@ -82,6 +82,7 @@ CREATE TABLE vendas (
 ALTER TABLE vendas ADD COLUMN chave_nfe VARCHAR(100) DEFAULT NULL, 
                       ADD COLUMN protocolo VARCHAR(50) DEFAULT NULL,
                       ADD COLUMN status_nf VARCHAR(30) DEFAULT NULL;
+ALTER TABLE vendas ADD COLUMN caixa_id INT;
 
 
 CREATE TABLE pagamentos (
@@ -100,8 +101,6 @@ CREATE TABLE caixas (
     data_fechamento DATETIME DEFAULT NULL,
     valor_fechamento DECIMAL(10,2) DEFAULT NULL
 );
-
-ALTER TABLE vendas ADD COLUMN caixa_id INT;
 
 CREATE TABLE sangrias (
     id INT AUTO_INCREMENT PRIMARY KEY,
