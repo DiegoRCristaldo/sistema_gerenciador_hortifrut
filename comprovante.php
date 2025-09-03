@@ -59,7 +59,7 @@ if ($danfe_path && file_exists($danfe_path)) {
 }
 
 // --- Lógica para geração do DANFE NFC-e (integrada) ---
-$nfe_autorizada_xml_path = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
+$nfe_autorizada_xml_path = __DIR__ . '/xml_autorizado/venda_' . $venda_id . '_autorizada.xml';
 $danfe_html = '';
 $danfe_gerado = false;
 
@@ -109,14 +109,6 @@ if (!$danfe_pdf_existe && $status_nf === 'ok' && file_exists($nfe_autorizada_xml
 
 // No comprovante.php, adicione:
 $nfe_autorizada_xml_path = __DIR__ . '/xmls/venda_' . $venda_id . '_assinado.xml';
-error_log("Procurando XML em: " . $nfe_autorizada_xml_path);
-
-// Verifique se o arquivo existe
-if (file_exists($nfe_autorizada_xml_path)) {
-    error_log("XML encontrado!");
-} else {
-    error_log("XML NÃO encontrado! Verifique permissões do diretório xmls/");
-}
 
 // No comprovante.php, adicione esta alternativa:
 if (!file_exists($nfe_autorizada_xml_path)) {
@@ -195,22 +187,13 @@ if (!file_exists($nfe_autorizada_xml_path)) {
         <!-- DANFE em PDF disponível -->
         <div class="mt-3 d-print-none">
             <h4>DANFE NFC-e (PDF)</h4>
-            <a href="<?= $danfe_pdf_path ?>" target="_blank" class="btn btn-success">
+            <a href="download_danfe.php?venda_id=<?= $venda_id ?>" target="_blank" class="btn btn-success">
                 📄 Visualizar DANFE NFC-e
             </a>
-            <a href="<?= $danfe_pdf_path ?>" download class="btn btn-primary">
+            <a href="download_danfe.php?venda_id=<?= $venda_id ?>&download=1" class="btn btn-primary">
                 ⬇️ Baixar DANFE
             </a>
             <p class="text-muted mt-2">O DANFE foi gerado com sucesso em formato PDF.</p>
-        </div>
-    <?php elseif ($danfe_gerado): ?>
-        <!-- DANFE em HTML (fallback) -->
-        <h3 class="d-print-none">DANFE NFC-e</h3>
-        <div class="danfe-container border p-3 mb-3 d-print-none">
-            <button class="btn btn-info mb-2" onclick="toggleDanfeVisibility()">Ver/Ocultar DANFE Completo</button>
-            <div id="danfe-visualizacao" style="display: none;">
-                <?php echo $danfe_html; ?>
-            </div>
         </div>
     <?php else: ?>
         <!-- DANFE não disponível -->

@@ -209,6 +209,7 @@ function verificarMultipla(selectElement) {
     const trocoDiv = document.getElementById('troco-div');
     const valorTotalContainer = document.getElementById('valor_total_container');
     const valorPagoInput = document.getElementById('valor-pago'); // O input dentro de valor-pago-div
+    const dadosCartaoDiv = document.getElementById('dados-cartao'); // Nova div para dados do cartão
 
     // Limpa e oculta tudo por padrão
     pagamentosExtrasDiv.innerHTML = '';
@@ -217,23 +218,36 @@ function verificarMultipla(selectElement) {
     valorPagoDiv.style.display = 'none';
     trocoDiv.style.display = 'none';
     valorTotalContainer.style.display = 'none'; // Oculta o campo de valor do pagamento principal
+    dadosCartaoDiv.style.display = 'none'; // Oculta dados do cartão por padrão
 
     const forma = selectElement.value;
     const totalVendaNum = parseFloat(document.getElementById('total').textContent.replace('R$', '').replace('.', '').replace(',', '.'));
 
-
     if (forma === 'Múltipla') {
         pagamentosExtrasDiv.style.display = 'block';
         botaoAdicionarDiv.style.display = 'block';
+        adicionarPagamento(true);
         adicionarPagamento(true); // Adiciona a primeira linha de pagamento ao selecionar Múltipla
     } else if (forma === 'Dinheiro') {
         valorPagoDiv.style.display = 'block';
         trocoDiv.style.display = 'block';
         valorPagoInput.value = totalVendaNum.toFixed(2); // Preenche com o total da venda por padrão
         calcularTroco();
-    } else {
-        // Para Cartão de Crédito, Cartão de Débito, PIX
+    } else if (forma === 'Cartão de Crédito' || forma === 'Cartão de Débito') {
+        // Para Cartão de Crédito ou Débito - mostra campo de valor E dados do cartão
         valorTotalContainer.style.display = 'block'; // Mostra o container do valor
+        dadosCartaoDiv.style.display = 'block'; // Mostra dados do cartão
+        
+        // Garante que o input de valor pago principal tenha o name correto e um valor padrão
+        const inputPrincipal = valorTotalContainer.querySelector('input[name="valor_pago[]"]');
+        if (inputPrincipal) {
+            inputPrincipal.value = totalVendaNum.toFixed(2); // Preenche com o total da venda
+            calcularTroco();
+        }
+    } else {
+        // Para PIX e outras formas - mostra apenas o campo de valor
+        valorTotalContainer.style.display = 'block'; // Mostra o container do valor
+        
         // Garante que o input de valor pago principal tenha o name correto e um valor padrão
         const inputPrincipal = valorTotalContainer.querySelector('input[name="valor_pago[]"]');
         if (inputPrincipal) {
@@ -242,40 +256,87 @@ function verificarMultipla(selectElement) {
     }
 }
 
-
-function adicionarPagamento(isFirst = false) {
+function adicionarPagamento(isMultipla = false) {
     const pagamentosExtrasDiv = document.getElementById('pagamentos-extras');
-    const novoIndex = pagamentosExtrasDiv.children.length; // Garante um índice único
+    const formaPagamentoPrincipal = document.getElementById('forma_pagamento_principal').value;
+    
+    // Só permite adicionar se for múltipla ou se não houver pagamentos extras ainda
+    if (!isMultipla && pagamentosExtrasDiv.children.length > 0) return;
 
-    const div = document.createElement('div');
-    div.className = 'd-flex align-items-center mb-2';
-    div.innerHTML = `
-        <select class="form-select me-2" name="forma_pagamento[]" required>
-            <option value="Cartão de Crédito">Cartão de Crédito</option>
-            <option value="Cartão de Débito">Cartão de Débito</option>
-            <option value="PIX">PIX</option>
-            <option value="Dinheiro">Dinheiro</option>
-        </select>
-        <input class="form-control me-2" type="text" name="valor_pago[]" placeholder="Valor pago (R$)" oninput="this.value = this.value.replace(/[^0-9,.]/g, '').replace(/,/g, '.'); calcularTrocoMultipla();">
-        <button type="button" class="btn btn-danger btn-sm" onclick="removerPagamento(this)">Remover</button>
+    const novoPagamentoDiv = document.createElement('div');
+    novoPagamentoDiv.className = 'pagamento-extra mb-2 p-2 border rounded';
+    
+    let html = `
+        <div class="row">
+            <div class="col-md-5">
+                <label class="form-label">Forma de Pagamento</label>
+                <select class="form-select" name="forma_pagamento[]" onchange="atualizarCamposCartao(this)">
+                    <option value="Cartão de Crédito">Cartão de Crédito</option>
+                    <option value="Cartão de Débito">Cartão de Débito</option>
+                    <option value="PIX">PIX</option>
+                    <option value="Dinheiro">Dinheiro</option>
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label">Valor (R$)</label>
+                <input type="number" step="0.01" class="form-control" name="valor_pago[]" required>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="button" class="btn btn-danger btn-sm" onclick="removerPagamento(this)">×</button>
+            </div>
+        </div>
+        <div class="dados-cartao-extra mt-2" style="display: none;">
+            <div class="row">
+                <div class="col-md-6">
+                    <label class="form-label">Bandeira do Cartão</label>
+                    <select class="form-select" name="bandeira_extra[]">
+                        <option value="">Selecione</option>
+                        <option value="01">Visa</option>
+                        <option value="02">Mastercard</option>
+                        <option value="03">American Express</option>
+                        <option value="06">Elo</option>
+                        <option value="07">Hipercard</option>
+                        <option value="99">Outros</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Últimos 4 dígitos</label>
+                    <input type="text" class="form-control" name="ultimos_digitos_extra[]" 
+                           maxlength="4" pattern="[0-9]{4}" placeholder="0000"
+                           oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                </div>
+            </div>
+        </div>
     `;
-    pagamentosExtrasDiv.appendChild(div);
-
-    // Se for o primeiro campo de pagamento em "Múltipla", preenche com o total
-    if (isFirst) {
-        const totalVendaNum = parseFloat(document.getElementById('total').textContent.replace('R$', '').replace('.', '').replace(',', '.'));
-        const inputValor = div.querySelector('input[name="valor_pago[]"]');
-        if (inputValor) {
-            inputValor.value = totalVendaNum.toFixed(2);
-        }
-    }
-    calcularTrocoMultipla();
+    
+    novoPagamentoDiv.innerHTML = html;
+    pagamentosExtrasDiv.appendChild(novoPagamentoDiv);
 }
 
+// Função para atualizar campos de cartão quando a forma de pagamento muda
+function atualizarCamposCartao(selectElement) {
+    const forma = selectElement.value;
+    const cartaoDiv = selectElement.closest('.pagamento-extra').querySelector('.dados-cartao-extra');
+    
+    if (forma === 'Cartão de Crédito' || forma === 'Cartão de Débito') {
+        cartaoDiv.style.display = 'block';
+        // Torna os campos obrigatórios
+        cartaoDiv.querySelectorAll('select, input').forEach(campo => {
+            campo.required = true;
+        });
+    } else {
+        cartaoDiv.style.display = 'none';
+        // Remove a obrigatoriedade
+        cartaoDiv.querySelectorAll('select, input').forEach(campo => {
+            campo.required = false;
+        });
+    }
+}
 
-function removerPagamento(buttonElement) {
-    buttonElement.closest('.d-flex').remove();
-    calcularTrocoMultipla();
+// Função para remover pagamento
+function removerPagamento(botao) {
+    const pagamentoDiv = botao.closest('.pagamento-extra');
+    pagamentoDiv.remove();
 }
 
 function calcularTroco() {

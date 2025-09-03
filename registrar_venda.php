@@ -129,7 +129,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             'cProd' => $produto['id'],
             'cEAN' => $produto['codigo_barras'] ?? 'SEM GTIN',
             'xProd' => $produto['nome'], 
-            'NCM' => $produto['ncm'] ?? '07099990',
+            'NCM' => $produto['ncm'] ?? '07099990', //Produtos horticulas em geral
             'CFOP' => $produto['cfop'] ?? '5102',
             'uCom' => $produto['unidade_medida'] ?? 'UN',
             'qCom' => $qtd,
@@ -154,8 +154,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         'Dinheiro'          => '01',
         'Cartão de Crédito' => '03',
         'Cartão de Débito'  => '04',
-        'PIX'               => '17', 
-        'Múltipla'          => '99', 
+        'PIX'               => '20' //Pode ser usado 17 para Pix dinâmico, mas vai exigir a tag <card> 
     ];
 
     // Substitua a geração aleatória do nNF por esta abordagem sequencial:
@@ -237,25 +236,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         ]
     ];
 
-    // Monta os pagamentos para o XML, preenchendo o array 'pagamentos' em $dadosVenda.
+    // Monta os pagamentos para o XML
     $dadosVenda['pagamentos'] = [];
-    $totalPagoNfce = 0; // Inicializa aqui
+    $totalPagoNfce = 0;
 
     foreach ($formas_pagamento as $i => $fp) {
         $valor_pag = isset($valores_pagamento[$i]) ? (float)str_replace(',', '.', $valores_pagamento[$i]) : $total;
-        $tPag = $payment_type_map[$fp] ?? '99'; 
+        $tPag = $payment_type_map[$fp];
         
         $pagamento = [
             'tPag' => $tPag, 
-            'vPag' => $valor_pag
+            'vPag' => $valor_pag,
+            'card' => ''
         ];
         
-        // Adiciona estrutura card para cartão/PIX
-        if (in_array($tPag, ['03', '04', '17'])) {
+        // Adiciona estrutura específica para cartão
+        if (in_array($tPag, ['03', '04'])) {
+            $bandeira = $_POST['bandeira_cartao'] ?? '99';
+            $ultimosDigitos = $_POST['ultimos_digitos'] ?? '';
+            
             $pagamento['card'] = [
-                'tpIntegra' => 2, // 2 = Não integrado com TEF (POS ou digitação manual)
-                // Para integração TEF automática use tpIntegra=1 e preencha CNPJ, tBand, cAut
+                'tpIntegra' => 2, // 2 = Não integrado
+                'tBand' => $bandeira,
+                'cAut' => 'AUT' . ($ultimosDigitos ?: str_pad(random_int(1, 9999), 4, '0', STR_PAD_LEFT))
             ];
+            
+            // CNPJ da credenciadora (opcional para tpIntegra=2, mas some UF exigem)
+            if ($dadosVenda['ide']['tpAmb'] == 1) { // Produção
+                $pagamento['card']['CNPJ'] = '20387824000173'; // CNPJ STONE Maquininha
+            }
         }
         
         $dadosVenda['pagamentos'][] = $pagamento;
@@ -270,7 +279,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     $dadosVenda['troco'] = $trocoNfce;
 
-// --- Início do processo de assinatura e envio via NFePHP ---
+    // --- Início do processo de assinatura e envio via NFePHP ---
     if (!file_exists(__DIR__ . '/vendor/autoload.php')) {
         $_SESSION['flash'] = 'Biblioteca NFePHP não encontrada. Execute: composer require nfephp-org/sped-nfe';
         header("Location: comprovante.php?id_venda=$venda_id");
@@ -290,11 +299,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Gera o XML não-assinado.
         $xml = gerarXmlNfce($dadosVenda);
         error_log("XML GERADO: " . $xml);
-        
-        // Salva o XML gerado para inspeção
-        if (!is_dir(__DIR__ . '/xmls')) mkdir(__DIR__ . '/xmls', 0750, true);
-        file_put_contents(__DIR__ . '/xmls/last_generated_nfce.xml', $xml);
 
+        // --- MODIFICAÇÃO MANUAL DO XML PARA INCLUIR CARD ---
+        foreach ($dadosVenda['pagamentos'] as $pag) {
+            if (in_array($pag['tPag'], ['03', '04']) && isset($pag['card'])) {
+                // Encontra a tag </detPag> e insere a tag card antes dela
+                $detPagEnd = strpos($xml, '</detPag>');
+                if ($detPagEnd !== false) {
+                    $cardXml = "<card>".
+                            "<tpIntegra>{$pag['card']['tpIntegra']}</tpIntegra>".
+                            "<tBand>{$pag['card']['tBand']}</tBand>".
+                            "<cAut>{$pag['card']['cAut']}</cAut>";
+                    
+                    $cardXml .= "</card>";
+                    
+                    $xml = substr_replace($xml, $cardXml, $detPagEnd, 0);
+                    error_log("XML modificado manualmente para incluir tag card");
+                    
+                    // Verifica se a modificação foi bem sucedida
+                    if (strpos($xml, '<card>') !== false) {
+                        error_log("Tag <card> adicionada com sucesso!");
+                    } else {
+                        error_log("Falha ao adicionar tag <card>");
+                    }
+                }
+            }
+        }
+
+        error_log("XML MODIFICADO: " . $xml);
+        
         // Assina o XML.
         $xmlAssinado = $tools->signNFe($xml);
 
@@ -305,9 +338,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Envia o lote para a SEFAZ (síncrono)
         $idLote = str_pad(random_int(1, 999999999), 15, '0', STR_PAD_LEFT);
         $resp = $tools->sefazEnviaLote([$xmlAssinado], $idLote, 1);
-
-        // Salva a resposta bruta da SEFAZ para diagnóstico.
-        file_put_contents(__DIR__ . '/xmls/sefaz_response_raw_' . $venda_id . '.xml', $resp);
         
         // Processa a resposta da SEFAZ
         $st = new Standardize();
@@ -339,7 +369,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
                 $nfeProc .= '<protNFe versao="4.00"><infProt><tpAmb>' . $dadosVenda['ide']['tpAmb'] . '</tpAmb><verAplic>' . ($std->protNFe->infProt->verAplic ?? '') . '</verAplic><chNFe>' . $chave . '</chNFe><dhRecbto>' . ($std->protNFe->infProt->dhRecbto ?? '') . '</dhRecbto><nProt>' . $protocolo . '</nProt><digVal>' . ($std->protNFe->infProt->digVal ?? '') . '</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>';
                 
-                $autFile = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
+                $autFile = __DIR__ . '/xml_autorizado/venda_' . $venda_id . '_autorizada.xml';
                 file_put_contents($autFile, $nfeProc);
 
                 // Atualiza o banco
@@ -372,7 +402,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $danfce->setOffLineDoublePrint(false); // false para NFC-e online
                     
                     // Adiciona créditos do integrador (opcional)
-                    $danfce->creditsIntegratorFooter('Sistema PDV - Hortifruti');
+                    $danfce->creditsIntegratorFooter('Sis Hort QFruta');
                     
                     // Renderiza o PDF
                     $pdfData = $danfce->render($logoPath);
@@ -409,7 +439,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
                     $nfeProc .= '<protNFe versao="4.00"><infProt><tpAmb>' . $dadosVenda['ide']['tpAmb'] . '</tpAmb><verAplic>' . ($std->protNFe->infProt->verAplic ?? '') . '</verAplic><chNFe>' . $chave . '</chNFe><dhRecbto>' . ($std->protNFe->infProt->dhRecbto ?? '') . '</dhRecbto><nProt>' . $protocolo . '</nProt><digVal>' . ($std->protNFe->infProt->digVal ?? '') . '</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>';
                     
-                    $autFile = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
+                    $autFile = __DIR__ . '/xml_autorizado/venda_' . $venda_id . '_autorizada.xml';
                     file_put_contents($autFile, $nfeProc);
 
                     // Atualiza o banco de dados
@@ -478,7 +508,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
                             $nfeProc .= '<protNFe versao="4.00"><infProt><tpAmb>' . $dadosVenda['ide']['tpAmb'] . '</tpAmb><verAplic>' . ($stdCons->protNFe->infProt->verAplic ?? '') . '</verAplic><chNFe>' . $chave . '</chNFe><dhRecbto>' . ($stdCons->protNFe->infProt->dhRecbto ?? '') . '</dhRecbto><nProt>' . $protocolo . '</nProt><digVal>' . ($stdCons->protNFe->infProt->digVal ?? '') . '</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>';
                             
-                            $autFile = __DIR__ . '/xmls/venda_' . $venda_id . '_autorizada.xml';
+                            $autFile = __DIR__ . '/xml_autorizado/venda_' . $venda_id . '_autorizada.xml';
                             file_put_contents($autFile, $nfeProc);
 
                             // Atualiza o banco de dados
@@ -611,10 +641,34 @@ require 'view/header.php';
             </select>
             </div>
 
-            <!-- Campo de valor (oculto inicialmente) -->
-            <div class="mb-3 mt-3" id="valor_total_container" style="margin-top: 10px; display: none;">
-                <label class="form-label">Valor total dessa forma:</label>
-                <input class="form-control" type="text" name="valor_pago[]" placeholder="Valor pago (R$)">
+            <!-- NOVO: Campos para dados do cartão (ocultos inicialmente) -->
+            <div id="dados-cartao" style="display: none; margin-top: 10px; border: 1px solid #ddd; padding: 15px; border-radius: 5px;">
+                <h6>💳 Dados do Cartão</h6>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label">Bandeira do Cartão</label>
+                        <select class="form-select" name="bandeira_cartao" id="bandeira_cartao" required>
+                            <option value="">Selecione a bandeira</option>
+                            <option value="01">Visa</option>
+                            <option value="02">Mastercard</option>
+                            <option value="03">American Express</option>
+                            <option value="06">Elo</option>
+                            <option value="07">Hipercard</option>
+                            <option value="99">Outros</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Últimos 4 dígitos</label>
+                        <input type="text" class="form-control" name="ultimos_digitos" id="ultimos_digitos" 
+                            maxlength="4" pattern="[0-9]{4}" placeholder="0000" required
+                            oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                    </div>
+                    <div class="mb-3 mt-3" id="valor_total_container" style="margin-top: 10px; display: none;">
+                        <label class="form-label">Valor total dessa forma:</label>
+                        <input class="form-control" type="text" name="valor_pago[]" placeholder="Valor pago (R$)">
+                    </div>
+                </div>
+                <small class="text-muted">Informações obrigatórias para pagamento com cartão.</small>
             </div>
 
             <!-- Bloco onde outras formas de pagamento serão adicionadas -->
@@ -624,6 +678,7 @@ require 'view/header.php';
             <div class="mb-3 mt-3" id="botao-adicionar" style="display: none; margin-top: 10px;">
                 <button type="button" class="btn btn-primary" onclick="adicionarPagamento()">Adicionar Forma de Pagamento</button>
             </div>
+            
             <div class="mb-3 mt-3" id="valor-pago-div" style="display:none;">
                 <label class="form-label">Valor Pago (R$)</label>
                 <input type="number" step="0.01" min="0" id="valor-pago" class="form-control" placeholder="Digite o valor pago" oninput="calcularTroco()">

@@ -244,19 +244,29 @@ function gerarXmlNfce($dadosVenda) {
         $detPag->tPag = $pag['tPag'];
         $detPag->vPag = number_format($pag['vPag'], 2, '.', '');
         
-        // ADICIONE ESTA PARTE PARA SUPORTAR A ESTRUTURA CARD
-        if (isset($pag['card'])) {
-            $card = new \stdClass();
-            $card->tpIntegra = $pag['card']['tpIntegra'];
-            
-            // Se for integração TEF (tpIntegra = 1), adiciona campos adicionais
-            if ($pag['card']['tpIntegra'] == 1 && isset($pag['card']['CNPJ'])) {
-                $card->CNPJ = $pag['card']['CNPJ'];
-                $card->tBand = $pag['card']['tBand'];
-                $card->cAut = $pag['card']['cAut'];
+        if($pag['tPag'] === '03' || $pag['tPag'] === '04'){
+            // ADICIONE ESTA PARTE CORRIGIDA PARA SUPORTAR A ESTRUTURA CARD
+            if (isset($pag['card'])) {
+                $card = new \stdClass();
+                $card->tpIntegra = $pag['card']['tpIntegra'];
+                
+                // CAMPOS OBRIGATÓRIOS PARA tpIntegra = 2 (não integrado)
+                if ($pag['card']['tpIntegra'] == 2) {
+                    // Para tpIntegra=2, tBand e cAut são OBRIGATÓRIOS
+                    $card->tBand = $pag['card']['tBand'] ?? '99'; // 99 = Outros
+                    $card->cAut = $pag['card']['cAut'] ?? 'AUT' . str_pad(random_int(1, 9999), 6, '0', STR_PAD_LEFT);
+                }
+                
+                // CAMPOS OBRIGATÓRIOS PARA tpIntegra = 1 (integrado)
+                if ($pag['card']['tpIntegra'] == 1) {
+                    // Para tpIntegra=1, CNPJ, tBand e cAut são OBRIGATÓRIOS
+                    $card->CNPJ = $pag['card']['CNPJ'] ?? '16501555000157'; // CNPJ genérico se não informado
+                    $card->tBand = $pag['card']['tBand'] ?? '99';
+                    $card->cAut = $pag['card']['cAut'] ?? 'AUT' . str_pad(random_int(1, 9999), 6, '0', STR_PAD_LEFT);
+                }
+                
+                $detPag->card = $card;
             }
-            
-            $detPag->card = $card;
         }
         
         $nfe->tagdetPag($detPag);
@@ -281,6 +291,18 @@ function gerarXmlNfce($dadosVenda) {
     $infNFeSupl->qrCode = 'http://www.hom.nfce.sefaz.ma.gov.br/portal/consultarNFCe.jsp?p=CHAVE|2|2|1|DIGEST_VALUE';
     $infNFeSupl->urlChave = 'www.sefaz.ma.gov.br/nfce/consulta';
     $nfe->taginfNFeSupl($infNFeSupl);
+
+    error_log("Dados de pagamento recebidos na gerarXmlNfce: " . print_r($dadosVenda['pagamentos'], true));
+
+    // Dentro do loop de pagamentos:
+    foreach ($dadosVenda['pagamentos'] as $index => $pag) {
+        error_log("Pagamento {$index}: tPag = " . $pag['tPag']);
+        if (isset($pag['card'])) {
+            error_log("Dados do cartão: " . print_r($pag['card'], true));
+        } else {
+            error_log("SEM DADOS DO CARTÃO para tPag = " . $pag['tPag']);
+        }
+    }
 
     return $nfe->getXML();
 }
