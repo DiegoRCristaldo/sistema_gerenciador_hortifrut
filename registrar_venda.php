@@ -135,6 +135,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             'qCom' => $qtd,
             'vUnCom' => $preco,
             'vProd' => $preco * $qtd,
+            'vDesc' => $desconto,
             'cEANTrib' => $produto['codigo_barras'] ?? 'SEM GTIN', // ADICIONE ESTA LINHA
             'uTrib' => $produto['unidade_medida'] ?? 'UN',
             'qTrib' => $qtd,
@@ -222,6 +223,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         'itens' => $itensParaXml, // Itens da venda para o XML
         'total' => [ // Totais da NFC-e
             'vProd' => number_format(array_sum(array_column($itensParaXml, 'vProd')), 2, '.', ''),
+            'vDesc' => number_format(array_sum(array_column($itensParaXml, 'vDesc')), 2, '.', ''),
             'vNF' => number_format($total, 2, '.', ''),
             'vBC' => 0, // Base de cálculo do ICMS (Simples Nacional)
             'vICMS' => 0 // Valor do ICMS (Simples Nacional)

@@ -151,6 +151,7 @@ function gerarXmlNfce($dadosVenda) {
         $prod->qCom     = number_format($item['qCom'], 4, '.', '');
         $prod->vUnCom   = number_format($item['vUnCom'], 2, '.', '');
         $prod->vProd    = number_format($item['vProd'], 2, '.', '');
+        $prod->vDesc    = number_format($item['vDesc'], 2, '.', '');
         $prod->cEANTrib = $item['cEANTrib'] ?? 'SEM GTIN';
         $prod->uTrib    = $item['uTrib'] ?? $prod->uCom;
         $prod->qTrib    = number_format($item['qTrib'] ?? $item['qCom'], 4, '.', '');
@@ -260,7 +261,7 @@ function gerarXmlNfce($dadosVenda) {
                 // CAMPOS OBRIGATÓRIOS PARA tpIntegra = 1 (integrado)
                 if ($pag['card']['tpIntegra'] == 1) {
                     // Para tpIntegra=1, CNPJ, tBand e cAut são OBRIGATÓRIOS
-                    $card->CNPJ = $pag['card']['CNPJ'] ?? '16501555000157'; // CNPJ genérico se não informado
+                    $card->CNPJ = $pag['card']['CNPJ'] ?? '20387824000173'; // CNPJ STONE Maquininha
                     $card->tBand = $pag['card']['tBand'] ?? '99';
                     $card->cAut = $pag['card']['cAut'] ?? 'AUT' . str_pad(random_int(1, 9999), 6, '0', STR_PAD_LEFT);
                 }
