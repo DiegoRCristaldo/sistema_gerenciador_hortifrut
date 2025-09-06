@@ -39,4 +39,9 @@ Class Bandeira{
     //Código de barras excluídos
     // Id 19 - Azeite de Coco Garrafinha - 6613249658143
 
+    //NCM alterado
+    // 50	Corante Coloral Grande	21039021	  
+    //49	Corante Coloral Pequeno	21039021		  
+    //48	Corante Coloral Médio   21039021
+
 }

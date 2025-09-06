@@ -50,7 +50,7 @@ function getNfeTools(): Tools
 }
 
 // Helper: monta XML básico NFC-e com NFePHP\NFe\Make (simplificado)
-function gerarXmlNfce($dadosVenda) {
+function gerarXmlNfce($dadosVenda, $desconto) {
     $nfe = new \NFePHP\NFe\Make();
 
     // -----------------------
@@ -151,7 +151,9 @@ function gerarXmlNfce($dadosVenda) {
         $prod->qCom     = number_format($item['qCom'], 4, '.', '');
         $prod->vUnCom   = number_format($item['vUnCom'], 2, '.', '');
         $prod->vProd    = number_format($item['vProd'], 2, '.', '');
-        $prod->vDesc    = number_format($item['vDesc'], 2, '.', '');
+        if($desconto > 0){
+            $prod->vDesc    = number_format($item['vDesc'], 2, '.', '');
+        }
         $prod->cEANTrib = $item['cEANTrib'] ?? 'SEM GTIN';
         $prod->uTrib    = $item['uTrib'] ?? $prod->uCom;
         $prod->qTrib    = number_format($item['qTrib'] ?? $item['qCom'], 4, '.', '');
@@ -206,7 +208,7 @@ function gerarXmlNfce($dadosVenda) {
     $tot->vProd = $dadosVenda['total']['vProd'];
     $tot->vFrete = 0.00;
     $tot->vSeg = 0.00;
-    $tot->vDesc = $dadosVenda['total']['vDesc'] ?? 0.00;
+    $tot->vDesc = $dadosVenda['total']['vDesc'];
     $tot->vII = 0.00;
     $tot->vIPI = 0.00;
     $tot->vIPIDevol = 0.00;
@@ -232,7 +234,7 @@ function gerarXmlNfce($dadosVenda) {
     $pagObj->indPag = 0; // 0=À vista (sempre para NFC-e)
 
     // Adiciona troco se houver e for > 0
-    $troco = $dadosVenda['troco'] ?? 0;
+    $troco = $dadosVenda['troco'];
     if ($troco > 0) {
         $pagObj->vTroco = number_format($troco, 2, '.', '');
     }
@@ -306,4 +308,15 @@ function gerarXmlNfce($dadosVenda) {
     }
 
     return $nfe->getXML();
+}
+
+// Função auxiliar para calcular o índice correto dos dados do cartão
+function getCartaoIndex($formas_pagamento, $currentIndex) {
+    $cartaoCount = 0;
+    for ($j = 0; $j < $currentIndex; $j++) {
+        if (in_array($formas_pagamento[$j], ['Cartão de Crédito', 'Cartão de Débito'])) {
+            $cartaoCount++;
+        }
+    }
+    return $cartaoCount;
 }

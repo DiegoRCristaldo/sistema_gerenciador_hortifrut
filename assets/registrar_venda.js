@@ -201,15 +201,19 @@ function atualizarTotal() {
     calcularTroco(); // Recalcula o troco/valor pago ao atualizar o total
 }
 
+// Adicione estas variáveis globais no início
+let totalPagamentosAdicionados = 0;
+let pagamentosAtivos = 0;
 
+// Modifique a função verificarMultipla
 function verificarMultipla(selectElement) {
     const pagamentosExtrasDiv = document.getElementById('pagamentos-extras');
     const botaoAdicionarDiv = document.getElementById('botao-adicionar');
     const valorPagoDiv = document.getElementById('valor-pago-div');
     const trocoDiv = document.getElementById('troco-div');
     const valorTotalContainer = document.getElementById('valor_total_container');
-    const valorPagoInput = document.getElementById('valor-pago'); // O input dentro de valor-pago-div
-    const dadosCartaoDiv = document.getElementById('dados-cartao'); // Nova div para dados do cartão
+    const valorPagoInput = document.getElementById('valor-pago');
+    const dadosCartaoDiv = document.getElementById('dados-cartao');
 
     // Limpa e oculta tudo por padrão
     pagamentosExtrasDiv.innerHTML = '';
@@ -217,8 +221,8 @@ function verificarMultipla(selectElement) {
     botaoAdicionarDiv.style.display = 'none';
     valorPagoDiv.style.display = 'none';
     trocoDiv.style.display = 'none';
-    valorTotalContainer.style.display = 'none'; // Oculta o campo de valor do pagamento principal
-    dadosCartaoDiv.style.display = 'none'; // Oculta dados do cartão por padrão
+    valorTotalContainer.style.display = 'none';
+    dadosCartaoDiv.style.display = 'none';
 
     const forma = selectElement.value;
     const totalVendaNum = parseFloat(document.getElementById('total').textContent.replace('R$', '').replace('.', '').replace(',', '.'));
@@ -226,70 +230,88 @@ function verificarMultipla(selectElement) {
     if (forma === 'Múltipla') {
         pagamentosExtrasDiv.style.display = 'block';
         botaoAdicionarDiv.style.display = 'block';
+        totalPagamentosAdicionados = 0;
+        pagamentosAtivos = 0;
+        
+        // Adiciona dois pagamentos iniciais
         adicionarPagamento(true);
-        adicionarPagamento(true); // Adiciona a primeira linha de pagamento ao selecionar Múltipla
+        adicionarPagamento(true);
+        
     } else if (forma === 'Dinheiro') {
         valorPagoDiv.style.display = 'block';
         trocoDiv.style.display = 'block';
-        valorPagoInput.value = totalVendaNum.toFixed(2); // Preenche com o total da venda por padrão
+        valorPagoInput.value = totalVendaNum.toFixed(2);
         calcularTroco();
+        
     } else if (forma === 'Cartão de Crédito' || forma === 'Cartão de Débito') {
-        // Para Cartão de Crédito ou Débito - mostra campo de valor E dados do cartão
-        valorTotalContainer.style.display = 'block'; // Mostra o container do valor
-        dadosCartaoDiv.style.display = 'block'; // Mostra dados do cartão
+        valorTotalContainer.style.display = 'block';
+        dadosCartaoDiv.style.display = 'block';
         
-        // Garante que o input de valor pago principal tenha o name correto e um valor padrão
         const inputPrincipal = valorTotalContainer.querySelector('input[name="valor_pago[]"]');
         if (inputPrincipal) {
-            inputPrincipal.value = totalVendaNum.toFixed(2); // Preenche com o total da venda
-            calcularTroco();
+            inputPrincipal.value = totalVendaNum.toFixed(2);
         }
-    } else {
-        // Para PIX e outras formas - mostra apenas o campo de valor
-        valorTotalContainer.style.display = 'block'; // Mostra o container do valor
         
-        // Garante que o input de valor pago principal tenha o name correto e um valor padrão
+    } else {
+        valorTotalContainer.style.display = 'block';
         const inputPrincipal = valorTotalContainer.querySelector('input[name="valor_pago[]"]');
         if (inputPrincipal) {
-            inputPrincipal.value = totalVendaNum.toFixed(2); // Preenche com o total da venda
+            inputPrincipal.value = totalVendaNum.toFixed(2);
         }
     }
 }
 
+// Nova função para distribuir valores automaticamente
+function distribuirValorPagamentos() {
+    const totalVendaNum = parseFloat(document.getElementById('total').textContent.replace('R$', '').replace('.', '').replace(',', '.'));
+    const inputsValor = document.querySelectorAll('#pagamentos-extras input[name="valor_pago[]"]');
+    
+    if (inputsValor.length === 0) return;
+    
+    const valorPorPagamento = (totalVendaNum / inputsValor.length).toFixed(2);
+    
+    inputsValor.forEach(input => {
+        input.value = valorPorPagamento;
+    });
+    
+    calcularTrocoMultipla();
+}
+
+// Modifique a função adicionarPagamento
 function adicionarPagamento(isMultipla = false) {
     const pagamentosExtrasDiv = document.getElementById('pagamentos-extras');
-    const formaPagamentoPrincipal = document.getElementById('forma_pagamento_principal').value;
-    
-    // Só permite adicionar se for múltipla ou se não houver pagamentos extras ainda
-    if (!isMultipla && pagamentosExtrasDiv.children.length > 0) return;
-
     const novoPagamentoDiv = document.createElement('div');
     novoPagamentoDiv.className = 'pagamento-extra mb-2 p-2 border rounded';
+    
+    const index = totalPagamentosAdicionados++;
+    pagamentosAtivos++;
     
     let html = `
         <div class="row">
             <div class="col-md-5">
                 <label class="form-label">Forma de Pagamento</label>
-                <select class="form-select" name="forma_pagamento[]" onchange="atualizarCamposCartao(this)">
+                <select class="form-select" name="forma_pagamento[]" onchange="atualizarCamposCartao(this, ${index})">
+                    <option value="Dinheiro">Dinheiro</option>
                     <option value="Cartão de Crédito">Cartão de Crédito</option>
                     <option value="Cartão de Débito">Cartão de Débito</option>
                     <option value="PIX">PIX</option>
-                    <option value="Dinheiro">Dinheiro</option>
                 </select>
             </div>
             <div class="col-md-5">
                 <label class="form-label">Valor (R$)</label>
-                <input type="number" step="0.01" class="form-control" name="valor_pago[]" required>
+                <input type="number" step="0.01" class="form-control valor-pagamento" 
+                       name="valor_pago[]" required 
+                       oninput="recalcularValores(this, ${index})">
             </div>
             <div class="col-md-2 d-flex align-items-end">
-                <button type="button" class="btn btn-danger btn-sm" onclick="removerPagamento(this)">×</button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="removerPagamento(this, ${index})">×</button>
             </div>
         </div>
-        <div class="dados-cartao-extra mt-2" style="display: none;">
+        <div class="dados-cartao-extra mt-2" style="display: none;" id="dados-cartao-${index}">
             <div class="row">
                 <div class="col-md-6">
                     <label class="form-label">Bandeira do Cartão</label>
-                    <select class="form-select" name="bandeira_extra[]">
+                    <select class="form-select" name="bandeira_extra[]" required>
                         <option value="">Selecione</option>
                         <option value="01">Visa</option>
                         <option value="02">Mastercard</option>
@@ -302,7 +324,7 @@ function adicionarPagamento(isMultipla = false) {
                 <div class="col-md-6">
                     <label class="form-label">Últimos 4 dígitos</label>
                     <input type="text" class="form-control" name="ultimos_digitos_extra[]" 
-                           maxlength="4" pattern="[0-9]{4}" placeholder="0000"
+                           maxlength="4" pattern="[0-9]{4}" placeholder="0000" required
                            oninput="this.value = this.value.replace(/[^0-9]/g, '')">
                 </div>
             </div>
@@ -311,32 +333,102 @@ function adicionarPagamento(isMultipla = false) {
     
     novoPagamentoDiv.innerHTML = html;
     pagamentosExtrasDiv.appendChild(novoPagamentoDiv);
+    
+    // Inicializa os campos de cartão para este novo pagamento
+    const selectElement = novoPagamentoDiv.querySelector('select[name="forma_pagamento[]"]');
+    atualizarCamposCartao(selectElement, index);
+    
+    // Distribui o valor automaticamente
+    distribuirValorPagamentos();
 }
 
-// Função para atualizar campos de cartão quando a forma de pagamento muda
-function atualizarCamposCartao(selectElement) {
+// Modifique a função atualizarCamposCartao
+function atualizarCamposCartao(selectElement, index) {
     const forma = selectElement.value;
-    const cartaoDiv = selectElement.closest('.pagamento-extra').querySelector('.dados-cartao-extra');
+    const cartaoDiv = document.getElementById(`dados-cartao-${index}`);
     
     if (forma === 'Cartão de Crédito' || forma === 'Cartão de Débito') {
         cartaoDiv.style.display = 'block';
-        // Torna os campos obrigatórios
         cartaoDiv.querySelectorAll('select, input').forEach(campo => {
             campo.required = true;
         });
     } else {
         cartaoDiv.style.display = 'none';
-        // Remove a obrigatoriedade
         cartaoDiv.querySelectorAll('select, input').forEach(campo => {
             campo.required = false;
         });
     }
 }
 
-// Função para remover pagamento
-function removerPagamento(botao) {
+// Nova função para recalcular valores quando um pagamento é editado
+function recalcularValores(inputEditado, indexEditado) {
+    const totalVendaNum = parseFloat(document.getElementById('total').textContent.replace('R$', '').replace('.', '').replace(',', '.'));
+    const inputsValor = document.querySelectorAll('#pagamentos-extras input.valor-pagamento');
+    
+    if (inputsValor.length <= 1) return;
+    
+    let totalAtual = 0;
+    inputsValor.forEach(input => {
+        totalAtual += parseFloat(input.value || 0);
+    });
+    
+    const diferenca = totalVendaNum - totalAtual;
+    
+    if (diferenca !== 0) {
+        // Distribui a diferença entre os outros pagamentos
+        const outrosInputs = Array.from(inputsValor).filter(input => input !== inputEditado);
+        const valorPorOutro = (diferenca / outrosInputs.length).toFixed(2);
+        
+        outrosInputs.forEach(input => {
+            const novoValor = (parseFloat(input.value || 0) + parseFloat(valorPorOutro)).toFixed(2);
+            input.value = Math.max(0, novoValor);
+        });
+    }
+    
+    calcularTrocoMultipla();
+}
+
+// Modifique a função removerPagamento
+function removerPagamento(botao, index) {
     const pagamentoDiv = botao.closest('.pagamento-extra');
     pagamentoDiv.remove();
+    pagamentosAtivos--;
+    
+    // Atualiza os índices dos pagamentos restantes
+    atualizarIndicesPagamentos();
+    
+    if (pagamentosAtivos > 0) {
+        distribuirValorPagamentos();
+    }
+    
+    calcularTrocoMultipla();
+}
+
+// Nova função para atualizar índices dos pagamentos
+function atualizarIndicesPagamentos() {
+    const pagamentos = document.querySelectorAll('.pagamento-extra');
+    pagamentos.forEach((pagamento, newIndex) => {
+        // Atualiza os atributos onchange e oninput
+        const select = pagamento.querySelector('select[name="forma_pagamento[]"]');
+        const input = pagamento.querySelector('input.valor-pagamento');
+        const removeBtn = pagamento.querySelector('button.btn-danger');
+        
+        if (select) {
+            select.setAttribute('onchange', `atualizarCamposCartao(this, ${newIndex})`);
+        }
+        if (input) {
+            input.setAttribute('oninput', `recalcularValores(this, ${newIndex})`);
+        }
+        if (removeBtn) {
+            removeBtn.setAttribute('onclick', `removerPagamento(this, ${newIndex})`);
+        }
+        
+        // Atualiza o ID dos dados do cartão
+        const cartaoDiv = pagamento.querySelector('.dados-cartao-extra');
+        if (cartaoDiv) {
+            cartaoDiv.id = `dados-cartao-${newIndex}`;
+        }
+    });
 }
 
 function calcularTroco() {
@@ -353,13 +445,14 @@ function calcularTroco() {
     document.getElementById('troco_final').value = troco.toFixed(2);
 }
 
+// Atualize a função calcularTrocoMultipla
 function calcularTrocoMultipla() {
     const totalVendaElement = document.getElementById('total');
     let totalVendaTexto = totalVendaElement.textContent.replace('R$', '').replace('.', '').replace(',', '.');
     const totalVenda = parseFloat(totalVendaTexto);
 
     let totalPago = 0;
-    document.querySelectorAll('#pagamentos-extras input[name="valor_pago[]"]').forEach(input => {
+    document.querySelectorAll('#pagamentos-extras input.valor-pagamento').forEach(input => {
         let valor = parseFloat(input.value.replace(/,/g, '.')) || 0;
         totalPago += valor;
     });
@@ -368,7 +461,6 @@ function calcularTrocoMultipla() {
     document.getElementById('troco').textContent = formatarMoeda(troco);
     document.getElementById('troco_final').value = troco.toFixed(2);
     
-    // Mostra/oculta div de troco se estiver no modo múltiplo
     const trocoDiv = document.getElementById('troco-div');
     if (totalPago > totalVenda) {
         trocoDiv.style.display = 'block';
@@ -377,6 +469,12 @@ function calcularTrocoMultipla() {
     }
 }
 
+// Adicione esta função para inicializar os campos de cartão
+function inicializarCamposCartao() {
+    document.querySelectorAll('#pagamentos-extras select[name="forma_pagamento[]"]').forEach((select, index) => {
+        atualizarCamposCartao(select, index);
+    });
+}
 
 function confirmarFinalizacao() {
     if (Object.keys(produtosAdicionados).length === 0) {
@@ -413,7 +511,6 @@ function confirmarFinalizacao() {
     }
 }
 
-
 function handleKeyPress(event) {
     if (event.key === 'Enter') {
         event.preventDefault(); // Impede o envio do formulário padrão
@@ -435,13 +532,14 @@ function handleKeyPressBuscaId(event) {
     }
 }
 
-
-// Event listeners para garantir que a atualização ocorra ao carregar a página
+// Modifique o event listener final
 document.addEventListener('DOMContentLoaded', () => {
     renderizarProdutosNaVenda();
-    // Garante que o estado inicial do select de pagamento seja processado
     const formaPagamentoPrincipal = document.getElementById('forma_pagamento_principal');
     if (formaPagamentoPrincipal) {
         verificarMultipla(formaPagamentoPrincipal);
     }
+    
+    // Inicializa campos de cartão após um breve delay
+    setTimeout(inicializarCamposCartao, 100);
 });

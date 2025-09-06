@@ -31,7 +31,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $valores_pagamento = $_POST['valor_pago'] ?? []; // Valores pagos por cada forma
     $total = 0; // Inicializa o total da venda
 
-    $troco_final = isset($_POST['troco_final']) ? (float)$_POST['troco_final'] : 0; // Troco calculado
+    $troco_final = isset($_POST['troco_final']); // Troco calculado
 
     $totalItens = 0; // Contagem de itens para verificar se a venda está vazia
     foreach ($quantidades as $id => $qtd) {
@@ -135,13 +135,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             'qCom' => $qtd,
             'vUnCom' => $preco,
             'vProd' => $preco * $qtd,
-            'vDesc' => $desconto,
+            'vDesc' => $desconto / $qtd,
             'cEANTrib' => $produto['codigo_barras'] ?? 'SEM GTIN', // ADICIONE ESTA LINHA
             'uTrib' => $produto['unidade_medida'] ?? 'UN',
             'qTrib' => $qtd,
             'vUnTrib' => $preco,
             'indTot' => 1
-        ];
+        ];        
     }
 
     // Define as configurações para a NFePHP.
@@ -155,7 +155,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         'Dinheiro'          => '01',
         'Cartão de Crédito' => '03',
         'Cartão de Débito'  => '04',
-        'PIX'               => '20' //Pode ser usado 17 para Pix dinâmico, mas vai exigir a tag <card> 
+        'PIX'               => '20' // PIX estático = 20, PIX dinâmico = 17
     ];
 
     // Substitua a geração aleatória do nNF por esta abordagem sequencial:
@@ -242,31 +242,41 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $dadosVenda['pagamentos'] = [];
     $totalPagoNfce = 0;
 
-    foreach ($formas_pagamento as $i => $fp) {
-        $valor_pag = isset($valores_pagamento[$i]) ? (float)str_replace(',', '.', $valores_pagamento[$i]) : $total;
+    // Percorre todos os arrays simultaneamente
+    $count = count($formas_pagamento);
+    for ($i = 0; $i < $count; $i++) {
+        $fp = $formas_pagamento[$i];
+        
+        if ($fp === 'Múltipla') {
+            continue; // Pula "Múltipla"
+        }
+        
+        $valor_pag = isset($valores_pagamento[$i]) ? (float)str_replace(',', '.', $valores_pagamento[$i]) : 0;
         $tPag = $payment_type_map[$fp];
         
         $pagamento = [
             'tPag' => $tPag, 
-            'vPag' => $valor_pag,
-            'card' => ''
+            'vPag' => $valor_pag
         ];
         
         // Adiciona estrutura específica para cartão
         if (in_array($tPag, ['03', '04'])) {
-            $bandeira = $_POST['bandeira_cartao'] ?? '99';
-            $ultimosDigitos = $_POST['ultimos_digitos'] ?? '';
+            // Para pagamentos múltiplos, use índice sequencial para dados do cartão
+            // Precisa determinar o índice correto baseado na posição atual
+            $cartaoIndex = getCartaoIndex($formas_pagamento, $i);
+            
+            $bandeira = $_POST['bandeira_extra'][$cartaoIndex] ?? $_POST['bandeira_cartao'] ?? '99';
+            $ultimosDigitos = $_POST['ultimos_digitos_extra'][$cartaoIndex] ?? $_POST['ultimos_digitos'] ?? '';
+            
+            if (empty($bandeira)) {
+                $bandeira = '99';
+            }
             
             $pagamento['card'] = [
-                'tpIntegra' => 2, // 2 = Não integrado
+                'tpIntegra' => 2,
                 'tBand' => $bandeira,
                 'cAut' => 'AUT' . ($ultimosDigitos ?: str_pad(random_int(1, 9999), 4, '0', STR_PAD_LEFT))
             ];
-            
-            // CNPJ da credenciadora (opcional para tpIntegra=2, mas some UF exigem)
-            if ($dadosVenda['ide']['tpAmb'] == 1) { // Produção
-                $pagamento['card']['CNPJ'] = '20387824000173'; // CNPJ STONE Maquininha
-            }
         }
         
         $dadosVenda['pagamentos'][] = $pagamento;
@@ -299,36 +309,33 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $tools->model(65); // Define o modelo como NFC-e
 
         // Gera o XML não-assinado.
-        $xml = gerarXmlNfce($dadosVenda);
+        $xml = gerarXmlNfce($dadosVenda, $desconto);
         error_log("XML GERADO: " . $xml);
 
         // --- MODIFICAÇÃO MANUAL DO XML PARA INCLUIR CARD ---
-        foreach ($dadosVenda['pagamentos'] as $pag) {
-            if (in_array($pag['tPag'], ['03', '04']) && isset($pag['card'])) {
-                // Encontra a tag </detPag> e insere a tag card antes dela
-                $detPagEnd = strpos($xml, '</detPag>');
-                if ($detPagEnd !== false) {
+        $detPagPattern = '/<detPag>.*?<\/detPag>/s';
+        preg_match_all($detPagPattern, $xml, $matches);
+
+        if (isset($matches[0])) {
+            foreach ($matches[0] as $index => $detPagOriginal) {
+                if (isset($dadosVenda['pagamentos'][$index]) && 
+                    in_array($dadosVenda['pagamentos'][$index]['tPag'], ['03', '04']) && 
+                    isset($dadosVenda['pagamentos'][$index]['card'])) {
+                    
+                    $pag = $dadosVenda['pagamentos'][$index];
                     $cardXml = "<card>".
                             "<tpIntegra>{$pag['card']['tpIntegra']}</tpIntegra>".
                             "<tBand>{$pag['card']['tBand']}</tBand>".
-                            "<cAut>{$pag['card']['cAut']}</cAut>";
+                            "<cAut>{$pag['card']['cAut']}</cAut>".
+                            "</card>";
                     
-                    $cardXml .= "</card>";
+                    $detPagModificado = str_replace('</detPag>', $cardXml . '</detPag>', $detPagOriginal);
+                    $xml = str_replace($detPagOriginal, $detPagModificado, $xml);
                     
-                    $xml = substr_replace($xml, $cardXml, $detPagEnd, 0);
-                    error_log("XML modificado manualmente para incluir tag card");
-                    
-                    // Verifica se a modificação foi bem sucedida
-                    if (strpos($xml, '<card>') !== false) {
-                        error_log("Tag <card> adicionada com sucesso!");
-                    } else {
-                        error_log("Falha ao adicionar tag <card>");
-                    }
+                    error_log("Tag <card> adicionada para pagamento $index");
                 }
             }
         }
-
-        error_log("XML MODIFICADO: " . $xml);
         
         // Assina o XML.
         $xmlAssinado = $tools->signNFe($xml);

@@ -165,6 +165,7 @@ require "view/header.php";
         </table>
     </div>
 
+    <!-- TODO: Barra de paginação que precisa colocar limite mámimo de 10 -->
     <nav class="no-print">
         <ul class="pagination justify-content-center">
             <?php for ($i = 1; $i <= $totalPaginas; $i++): ?>
