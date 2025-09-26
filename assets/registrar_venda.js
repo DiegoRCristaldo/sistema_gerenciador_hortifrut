@@ -268,10 +268,21 @@ function distribuirValorPagamentos() {
     
     if (inputsValor.length === 0) return;
     
-    const valorPorPagamento = (totalVendaNum / inputsValor.length).toFixed(2);
+    // Converte para centavos para evitar problemas de ponto flutuante
+    const totalCentavos = Math.round(totalVendaNum * 100);
+    const valorPorPagamentoCentavos = Math.floor(totalCentavos / inputsValor.length);
+    const resto = totalCentavos % inputsValor.length;
     
-    inputsValor.forEach(input => {
-        input.value = valorPorPagamento;
+    inputsValor.forEach((input, index) => {
+        let valorCentavos = valorPorPagamentoCentavos;
+        
+        // Distribui o resto (centavos que sobraram) nos primeiros pagamentos
+        if (index < resto) {
+            valorCentavos += 1;
+        }
+        
+        // Converte de volta para reais
+        input.value = (valorCentavos / 100).toFixed(2);
     });
     
     calcularTrocoMultipla();

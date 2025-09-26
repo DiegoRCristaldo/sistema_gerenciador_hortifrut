@@ -112,6 +112,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     // Calcula total e monta array de itens para o XML da NFC-e.
     $itensParaXml = [];
+    $valorTotalProdutos = 0;
+
+    // Primeiro, calcula o valor total dos produtos (sem desconto)
     foreach ($quantidades as $id => $qtd) {
         $id = (int)$id;
         $qtd = (float)$qtd;
@@ -123,25 +126,144 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $produto = $res->fetch_assoc();
 
         $preco = (float)$produto['preco'];
+        $valorProduto = $preco * $qtd;
+        $valorTotalProdutos += $valorProduto;
+    }
 
+    // Agora distribui o desconto proporcionalmente com precisão
+    $somaDescontosItens = 0;
+    $ultimoIndex = null;
+    $itensParaXml = []; // Reinicia o array
+
+    foreach ($quantidades as $id => $qtd) {
+        $id = (int)$id;
+        $qtd = (float)$qtd;
+        if ($qtd <= 0) continue;
+
+        $stmt_produto->bind_param("i", $id);
+        $stmt_produto->execute();
+        $res = $stmt_produto->get_result();
+        $produto = $res->fetch_assoc();
+
+        $preco = (float)$produto['preco'];
+        $valorBruto = $preco * $qtd;
+
+        // Calcula o desconto proporcional para este item
+        $descontoItem = 0;
+        if ($desconto > 0 && $valorTotalProdutos > 0) {
+            $percentualItem = $valorBruto / $valorTotalProdutos;
+            $descontoItem = round($desconto * $percentualItem, 2);
+        }
+
+        $somaDescontosItens += $descontoItem;
+        
+        // CORREÇÃO: vProd é o valor BRUTO, o líquido será calculado depois
         $itensParaXml[] = [
             'id' => $produto['id'],
             'cProd' => $produto['id'],
             'cEAN' => $produto['codigo_barras'] ?? 'SEM GTIN',
             'xProd' => $produto['nome'], 
-            'NCM' => $produto['ncm'] ?? '07099990', //Produtos horticulas em geral
+            'NCM' => $produto['ncm'] ?? '07099990',
             'CFOP' => $produto['cfop'] ?? '5102',
             'uCom' => $produto['unidade_medida'] ?? 'UN',
             'qCom' => $qtd,
             'vUnCom' => $preco,
-            'vProd' => $preco * $qtd,
-            'vDesc' => $desconto / $qtd,
-            'cEANTrib' => $produto['codigo_barras'] ?? 'SEM GTIN', // ADICIONE ESTA LINHA
+            'vProd' => round($valorBruto, 2), // VALOR BRUTO (antes do desconto)
+            'vDesc' => round($descontoItem, 2),
+            'cEANTrib' => $produto['codigo_barras'] ?? 'SEM GTIN',
             'uTrib' => $produto['unidade_medida'] ?? 'UN',
             'qTrib' => $qtd,
             'vUnTrib' => $preco,
             'indTot' => 1
-        ];        
+        ];
+        
+        $ultimoIndex = count($itensParaXml) - 1;
+    }
+
+    // Ajusta diferenças de arredondamento com precisão
+    $diferenca = round($desconto - $somaDescontosItens, 2);
+
+    if (abs($diferenca) > 0.009 && $ultimoIndex !== null && count($itensParaXml) > 0) {
+        // Ajusta a diferença no último item
+        $itensParaXml[$ultimoIndex]['vDesc'] = round(
+            $itensParaXml[$ultimoIndex]['vDesc'] + $diferenca, 
+            2
+        );
+        
+        // Recalcula o valor do produto com desconto ajustado
+        $itensParaXml[$ultimoIndex]['vProd'] = round(
+            $itensParaXml[$ultimoIndex]['vUnCom'] * $itensParaXml[$ultimoIndex]['qCom'] - 
+            $itensParaXml[$ultimoIndex]['vDesc'],
+            2
+        );
+    }
+
+    // Recalcula totais finais após ajustes - CORREÇÃO IMPORTANTE
+    $valorTotalProdutosFinal = 0;
+    $descontoFinal = 0;
+
+    foreach ($itensParaXml as $item) {
+        // CORREÇÃO: vProd deve ser o valor BRUTO (antes do desconto)
+        // O valor líquido é vProd - vDesc
+        $valorBrutoItem = $item['vProd'];
+        $valorTotalProdutosFinal += $valorBrutoItem;
+        $descontoFinal += $item['vDesc'];
+    }
+
+    // Garante que o total da NF está correto
+    $totalNF = round($valorTotalProdutosFinal - $descontoFinal, 2);
+
+    // VERIFICAÇÃO DE CONSISTÊNCIA CRÍTICA
+    $somaVDescItens = round($descontoFinal, 2);
+    $somaVProdItens = round($valorTotalProdutosFinal, 2);
+
+    error_log("=== VERIFICAÇÃO DE CONSISTÊNCIA ===");
+    error_log("Soma vDesc itens: " . $somaVDescItens);
+    error_log("Desconto total: " . $desconto);
+    error_log("Soma vProd itens: " . $somaVProdItens);
+    error_log("Total NF: " . $totalNF);
+    error_log("Diferença vDesc: " . ($desconto - $somaVDescItens));
+
+    // Se houver diferença significativa, ajusta no último item
+    if (abs($desconto - $somaVDescItens) > 0.01 && $ultimoIndex !== null && count($itensParaXml) > 0) {
+        $ajuste = round($desconto - $somaVDescItens, 2);
+        $itensParaXml[$ultimoIndex]['vDesc'] = round($itensParaXml[$ultimoIndex]['vDesc'] + $ajuste, 2);
+        
+        // Recalcula o vProd mantendo o valor bruto correto
+        $valorBruto = $itensParaXml[$ultimoIndex]['vUnCom'] * $itensParaXml[$ultimoIndex]['qCom'];
+        $itensParaXml[$ultimoIndex]['vProd'] = round($valorBruto - $itensParaXml[$ultimoIndex]['vDesc'], 2);
+        
+        // Recalcula totais após ajuste
+        $valorTotalProdutosFinal = 0;
+        $descontoFinal = 0;
+        foreach ($itensParaXml as $item) {
+            $valorBrutoItem = $item['vProd'];
+            $valorTotalProdutosFinal += $valorBrutoItem;
+            $descontoFinal += $item['vDesc'];
+        }
+        $totalNF = round($valorTotalProdutosFinal - $descontoFinal, 2);
+    }
+
+    $totalArray = [
+        'vProd' => round($valorTotalProdutosFinal, 2),
+        'vNF' => round($totalNF, 2),
+        'vBC' => 0,
+        'vICMS' => 0
+    ];
+
+    // SEMPRE adicione vDesc, mesmo que zero (a NFePHP vai omitir se for zero)
+    $totalArray['vDesc'] = round($descontoFinal, 2);
+
+    // Verificação final
+    error_log("=== TOTAIS FINAIS ===");
+    error_log("vProd total: " . $totalArray['vProd']);
+    error_log("vDesc total: " . $totalArray['vDesc']);
+    error_log("vNF total: " . $totalArray['vNF']);
+    error_log("Cálculo: " . ($totalArray['vProd'] - $totalArray['vDesc']) . " = " . $totalArray['vNF']);
+
+    // Adiciona vDesc apenas se houver desconto
+    if ($descontoFinal > 0) {
+        $totalArray['vDesc'] = round($descontoFinal, 2);
     }
 
     // Define as configurações para a NFePHP.
@@ -221,13 +343,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // se o CPF for informado, a Sefaz pode rejeitar ou sobrescrever.
         ],
         'itens' => $itensParaXml, // Itens da venda para o XML
-        'total' => [ // Totais da NFC-e
-            'vProd' => number_format(array_sum(array_column($itensParaXml, 'vProd')), 2, '.', ''),
-            'vDesc' => number_format(array_sum(array_column($itensParaXml, 'vDesc')), 2, '.', ''),
-            'vNF' => number_format($total, 2, '.', ''),
-            'vBC' => 0, // Base de cálculo do ICMS (Simples Nacional)
-            'vICMS' => 0 // Valor do ICMS (Simples Nacional)
-        ],
+        'total' => $totalArray,
         'pagamentos' => [], // Inicializa o array de pagamentos
         'troco' => $troco_final, // Troco da venda
         'infRespTec' => [ // Informações do Responsável Técnico (opcional)
@@ -299,6 +415,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     require __DIR__ . '/vendor/autoload.php';
+
+    // Verificação final antes de gerar o XML
+    if (!verificarConsistenciaDescontos($itensParaXml, $totalArray)) {
+        error_log("ERRO: Inconsistência detectada nos descontos!");
+        // Ajuste emergencial - força a consistência
+        $totalArray['vDesc'] = round(array_sum(array_column($itensParaXml, 'vDesc')), 2);
+        $totalArray['vProd'] = round(array_sum(array_column($itensParaXml, 'vProd')), 2);
+        $totalArray['vNF'] = round($totalArray['vProd'] - $totalArray['vDesc'], 2);
+        
+        error_log("Totais ajustados:");
+        error_log("vProd: " . $totalArray['vProd']);
+        error_log("vDesc: " . $totalArray['vDesc']);
+        error_log("vNF: " . $totalArray['vNF']);
+    }
 
     try {
         $configJson = file_get_contents($configJsonPath);
