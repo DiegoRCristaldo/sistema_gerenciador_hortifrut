@@ -31,13 +31,31 @@ function getNfeTools(): Tools
 
     $config = getConfig();
 
-    $certPfxName = __DIR__ . $dados['certificadoPfx'];
-    $senhaPfx = $dados['senhaPfx'];
-    if (!file_exists($certPfxName)) {
-        throw new Exception("Certificado digital não encontrado: " . $certPfxName);
-    }
+    // Prioridade: PEM > PFX
+    $certPemPath = __DIR__ . '/certificados/certificado.pem';
+    $certPfxPath = __DIR__ . $dados['certificadoPfx'];
     
-    $cert = Certificate::readPfx($certPfxName, $senhaPfx);
+    if (file_exists($certPemPath)) {
+        // Usa o certificado PEM convertido
+        echo "Usando certificado PEM...\n";
+        $certContent = file_get_contents($certPemPath);
+        $cert = Certificate::readPfx($certContent);
+    } elseif (file_exists($certPfxPath)) {
+        // Fallback para PFX (com tratamento de erro)
+        echo "Usando certificado PFX (fallback)...\n";
+        $pfxContent = file_get_contents($certPfxPath);
+        $senhaPfx = $dados['senhaPfx'];
+        
+        // Tenta ler via OpenSSL direto primeiro
+        if (openssl_pkcs12_read($pfxContent, $certs, $senhaPfx)) {
+            $cert = Certificate::createFromPKey($certs['pkey'], $certs['cert']);
+        } else {
+            // Última tentativa com a biblioteca
+            $cert = Certificate::readPfx($pfxContent, $senhaPfx);
+        }
+    } else {
+        throw new Exception("Nenhum certificado encontrado. Execute o script de conversão primeiro.");
+    }
 
     $tools = new Tools(
         json_encode($config),
@@ -116,7 +134,7 @@ function gerarXmlNfce($dadosVenda, $desconto) {
     $enderEmit->fone = $dadosVenda['emit']['enderEmit']['fone'] ?? ''; // Opcional, mas bom ter
     $nfe->tagenderEmit($enderEmit); 
 
-
+    /*
     // -----------------------
     // Destinatário
     // -----------------------
@@ -134,7 +152,7 @@ function gerarXmlNfce($dadosVenda, $desconto) {
         // e 'indIEDest=9' automaticamente.
     }
     
-    $nfe->tagdest($dest);
+    $nfe->tagdest($dest);*/
 
     // -----------------------
     // Produtos/Itens

@@ -315,7 +315,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             'tpImp' => 4, //Valor 4 - DANFE NFC-e ou 5 - DANFE NFC-e em mensagem eletrônica.
             'tpEmis' => 1, 
             // A linha 'cDV' foi REMOVIDA para que a NFePHP calcule automaticamente.
-            'tpAmb' => 2, // 1 = Produção, 2 = Homologação
+            'tpAmb' => 1, // 1 = Produção, 2 = Homologação
             'finNFe' => 1, 'indFinal' => 1, 'indPres' => 1, 'procEmi' => 0, 'verProc' => 'PDV-1.0'
         ],
         'emit' => [
@@ -336,12 +336,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             'IE' => $dados['ieEmitente'], // Inscrição Estadual do dados.php
             'CRT' => 1 // Código de Regime Tributário (1=Simples Nacional)
         ],
-        'dest' => [ // Dados do destinatário (consumidor)
-            'CPF' => '02914577117', // CPF do Diego (PARA TESTE).
-            'xNome' => "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
+        /*'dest' => [ // Dados do destinatário (consumidor)
+            //'CPF' => $dados['cpfTeste'],
+            //'xNome' => "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL" -> quando o tpAmb é 2
             // 'indIEDest' NÃO DEVEM ser incluídos aqui em ambiente de produção
             // se o CPF for informado, a Sefaz pode rejeitar ou sobrescrever.
-        ],
+        ],*/
         'itens' => $itensParaXml, // Itens da venda para o XML
         'total' => $totalArray,
         'pagamentos' => [], // Inicializa o array de pagamentos
