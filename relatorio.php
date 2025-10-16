@@ -147,6 +147,7 @@ require "view/header.php";
                             <td>
                                     <form method="POST" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja excluir esta venda?');">
                                     <input type="hidden" name="excluir_id" value="<?= $row['id'] ?>">
+                                    <a href="download_danfe.php?venda_id=<?= $row['id'] ?>" target="_blank" class="btn btn-warning">Ver Danfce</a>
                                     <button type="submit" class="btn btn-sm btn-danger ms-2">Excluir</button>
                                 </form>
                             </td>

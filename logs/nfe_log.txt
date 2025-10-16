@@ -1,0 +1,59 @@
+[2025-10-06 19:58:42][INFO][IP:::1][VENDA:656] Iniciando processo NFC-e para venda 656
+[2025-10-06 19:58:42][INFO][IP:::1][VENDA:656] Verificações iniciais passaram
+[2025-10-06 19:58:42][INFO][IP:::1][VENDA:656] Certificado carregado | Dados: {"tamanho":11380,"contem_private_key":true,"contem_certificate":true}
+[2025-10-06 19:58:43][INFO][IP:::1][VENDA:656] Certificado carregado com sucesso via PEM
+[2025-10-06 19:58:46][INFO][IP:::1][VENDA:656] Tools instanciado com sucesso
+[2025-10-06 19:58:47][INFO][IP:::1][VENDA:656] XML gerado | Dados: {"tamanho":3584}
+[2025-10-06 19:58:47][INFO][IP:::1][VENDA:656] XML original salvo para debug: C:\wamp64\www\varejao/xmls/debug/original_venda_656_2025-10-06_19-58-47.xml
+[2025-10-06 19:58:47][INFO][IP:::1][VENDA:656] Tag <card> adicionada para pagamento 0 | Dados: {"tPag":"03","bandeira":"99"}
+[2025-10-06 19:58:47][INFO][IP:::1][VENDA:656] Modificações XML concluídas | Dados: {"total_modificacoes":1}
+[2025-10-06 19:58:47][INFO][IP:::1][VENDA:656] Iniciando assinatura do XML
+[2025-10-06 19:58:48][INFO][IP:::1][VENDA:656] XML assinado com sucesso | Dados: {"tamanho":7444}
+[2025-10-06 19:58:48][INFO][IP:::1][VENDA:656] XML assinado salvo para debug: C:\wamp64\www\varejao/xmls/debug/assinado_venda_656_2025-10-06_19-58-48.xml
+[2025-10-06 19:58:48][INFO][IP:::1][VENDA:656] XML assinado salvo oficialmente: C:\wamp64\www\varejao/xmls/venda_656_assinado.xml
+[2025-10-06 19:58:48][INFO][IP:::1][VENDA:656] Preparando envio para SEFAZ
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] Iniciando processo NFC-e para venda 657
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] Verificações iniciais passaram
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] Certificado carregado | Dados: {"tamanho":11380,"contem_private_key":true,"contem_certificate":true}
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] Certificado carregado com sucesso via PEM
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] Tools instanciado com sucesso
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] XML gerado | Dados: {"tamanho":3584}
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] XML original salvo para debug: C:\wamp64\www\varejao/xmls/debug/original_venda_657_2025-10-06_20-02-38.xml
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] Tag <card> adicionada para pagamento 0 | Dados: {"tPag":"03","bandeira":"99"}
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] Modificações XML concluídas | Dados: {"total_modificacoes":1}
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] Iniciando assinatura do XML
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] XML assinado com sucesso | Dados: {"tamanho":7444}
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] XML assinado salvo para debug: C:\wamp64\www\varejao/xmls/debug/assinado_venda_657_2025-10-06_20-02-38.xml
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] XML assinado salvo oficialmente: C:\wamp64\www\varejao/xmls/venda_657_assinado.xml
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] Preparando envio para SEFAZ
+[2025-10-06 20:02:38][INFO][IP:::1][VENDA:657] Enviando lote para SEFAZ | Dados: {"idLote":"000000000000657","timeout":30}
+[2025-10-06 20:02:39][INFO][IP:::1][VENDA:657] Resposta bruta da SEFAZ recebida | Dados: {"tamanho_resposta":937}
+[2025-10-06 20:02:39][ERRO][IP:::1][VENDA:657] Erro no processamento da resposta SEFAZ | Dados: Falha ao parsear resposta XML da SEFAZ
+[2025-10-06 20:02:39][ERRO][IP:::1][VENDA:657] ERRO CRÍTICO no processo NFC-e | Dados: Erro no processamento da resposta: Falha ao parsear resposta XML da SEFAZ
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] Iniciando processo NFC-e para venda 658
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] Verificações iniciais passaram
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] Certificado carregado | Dados: {"tamanho":11380,"contem_private_key":true,"contem_certificate":true}
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] Certificado carregado com sucesso via PEM
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] Tools instanciado com sucesso
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] XML gerado | Dados: {"tamanho":3789}
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] XML original salvo para debug: C:\wamp64\www\varejao/xmls/debug/original_venda_658_2025-10-06_20-48-18.xml
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] Tag <card> adicionada para pagamento 0 | Dados: {"tPag":"03","bandeira":"99"}
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] Modificações XML concluídas | Dados: {"total_modificacoes":1}
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] Iniciando assinatura do XML
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] XML assinado com sucesso | Dados: {"tamanho":7653}
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] XML assinado salvo para debug: C:\wamp64\www\varejao/xmls/debug/assinado_venda_658_2025-10-06_20-48-18.xml
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] XML assinado salvo oficialmente: C:\wamp64\www\varejao/xmls/venda_658_assinado.xml
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] Preparando envio para SEFAZ
+[2025-10-06 20:48:18][INFO][IP:::1][VENDA:658] Enviando lote para SEFAZ | Dados: {"idLote":"000000000000658","timeout":30}
+[2025-10-06 20:48:20][INFO][IP:::1][VENDA:658] Resposta bruta da SEFAZ recebida | Dados: {"tamanho_resposta":933}
+[2025-10-06 20:48:20][ERRO][IP:::1][VENDA:658] Erro no processamento da resposta SEFAZ | Dados: Falha ao parsear resposta XML da SEFAZ
+[2025-10-06 20:48:20][ERRO][IP:::1][VENDA:658] ERRO CRÍTICO no processo NFC-e | Dados: Erro no processamento da resposta: Falha ao parsear resposta XML da SEFAZ
+[07-Oct-2025 22:27:38 America/Sao_Paulo] XML puro da resposta: <retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><cStat>104</cStat><xMotivo>Lote processado</xMotivo><cUF>21</cUF><dhRecbto>2025-10-07T22:27:38-03:00</dhRecbto><protNFe versao="4.00"><infProt><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><chNFe>21251060591030000141650010000003381535890862</chNFe><dhRecbto>2025-10-07T22:27:38-03:00</dhRecbto><nProt>221250383424986</nProt><digVal>MgKfqBTJy89SNuO6G/hQe5LIFIY=</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></retEnviNFe>
+[14-Oct-2025 22:55:15 America/Sao_Paulo] XML puro da resposta: <retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><cStat>104</cStat><xMotivo>Lote processado</xMotivo><cUF>21</cUF><dhRecbto>2025-10-14T22:55:15-03:00</dhRecbto><protNFe versao="4.00"><infProt><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><chNFe>21251060591030000141650010000003391240209649</chNFe><dhRecbto>2025-10-14T22:55:15-03:00</dhRecbto><nProt>221250393656162</nProt><digVal>DbhC9+nAZFYp/CbYeXz6zH9mTgc=</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></retEnviNFe>
+[14-Oct-2025 23:22:01 America/Sao_Paulo] XML puro da resposta: <retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><cStat>104</cStat><xMotivo>Lote processado</xMotivo><cUF>21</cUF><dhRecbto>2025-10-14T23:22:02-03:00</dhRecbto><protNFe versao="4.00"><infProt><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><chNFe>21251060591030000141650010000003401298979294</chNFe><dhRecbto>2025-10-14T23:22:02-03:00</dhRecbto><nProt>221250393664216</nProt><digVal>6Hn3IuwLItDBRimA2AV5uqdsa2c=</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></retEnviNFe>
+[14-Oct-2025 23:22:41 America/Sao_Paulo] XML puro da resposta: <retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><cStat>104</cStat><xMotivo>Lote processado</xMotivo><cUF>21</cUF><dhRecbto>2025-10-14T23:22:42-03:00</dhRecbto><protNFe versao="4.00"><infProt><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><chNFe>21251060591030000141650010000003411020714946</chNFe><dhRecbto>2025-10-14T23:22:42-03:00</dhRecbto><digVal>qY+SoINT1sUui6Y4tqQfPG8ZFBo=</digVal><cStat>869</cStat><xMotivo>Rejeicao: Valor do troco incorreto</xMotivo></infProt></protNFe></retEnviNFe>
+[14-Oct-2025 23:25:51 America/Sao_Paulo] XML puro da resposta: <retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><cStat>104</cStat><xMotivo>Lote processado</xMotivo><cUF>21</cUF><dhRecbto>2025-10-14T23:25:51-03:00</dhRecbto><protNFe versao="4.00"><infProt><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><chNFe>21251060591030000141650010000003421413761076</chNFe><dhRecbto>2025-10-14T23:25:51-03:00</dhRecbto><digVal>db8sD9A8bFIt7jN+ZT7VVzGmwBk=</digVal><cStat>869</cStat><xMotivo>Rejeicao: Valor do troco incorreto</xMotivo></infProt></protNFe></retEnviNFe>
+[14-Oct-2025 23:41:30 America/Sao_Paulo] XML puro da resposta: <retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><cStat>104</cStat><xMotivo>Lote processado</xMotivo><cUF>21</cUF><dhRecbto>2025-10-14T23:41:31-03:00</dhRecbto><protNFe versao="4.00"><infProt><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><chNFe>21251060591030000141650010000003431966332494</chNFe><dhRecbto>2025-10-14T23:41:31-03:00</dhRecbto><digVal>S+AOpxdHI6sZlf4eYSjKin9My2Q=</digVal><cStat>869</cStat><xMotivo>Rejeicao: Valor do troco incorreto</xMotivo></infProt></protNFe></retEnviNFe>
+[15-Oct-2025 23:18:11 America/Sao_Paulo] XML puro da resposta: <retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><cStat>104</cStat><xMotivo>Lote processado</xMotivo><cUF>21</cUF><dhRecbto>2025-10-15T23:18:11-03:00</dhRecbto><protNFe versao="4.00"><infProt><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><chNFe>21251060591030000141650010000003441296354253</chNFe><dhRecbto>2025-10-15T23:18:11-03:00</dhRecbto><digVal>PeHHVGVeqvrFDaQc/wQi208Q0Jo=</digVal><cStat>869</cStat><xMotivo>Rejeicao: Valor do troco incorreto</xMotivo></infProt></protNFe></retEnviNFe>
+[15-Oct-2025 23:21:41 America/Sao_Paulo] XML puro da resposta: <retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><cStat>104</cStat><xMotivo>Lote processado</xMotivo><cUF>21</cUF><dhRecbto>2025-10-15T23:21:41-03:00</dhRecbto><protNFe versao="4.00"><infProt><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><chNFe>21251060591030000141650010000003451419759288</chNFe><dhRecbto>2025-10-15T23:21:41-03:00</dhRecbto><nProt>221250395155693</nProt><digVal>OfjOmYg2ojbua9pd4qHalf7ck68=</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></retEnviNFe>
+[15-Oct-2025 23:27:51 America/Sao_Paulo] XML puro da resposta: <retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><cStat>104</cStat><xMotivo>Lote processado</xMotivo><cUF>21</cUF><dhRecbto>2025-10-15T23:27:51-03:00</dhRecbto><protNFe versao="4.00"><infProt><tpAmb>1</tpAmb><verAplic>SVRSnfce2509011501DR</verAplic><chNFe>21251060591030000141650010000003461773879817</chNFe><dhRecbto>2025-10-15T23:27:51-03:00</dhRecbto><nProt>221250395156929</nProt><digVal>381gtEYxEhUksXpV5ynnGijPqBw=</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe></retEnviNFe>

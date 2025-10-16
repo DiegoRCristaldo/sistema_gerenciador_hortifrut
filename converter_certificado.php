@@ -1,80 +1,77 @@
 <?php
-// converter_certificado_php.php
+// converter_e_usar.php
+require __DIR__ . '/vendor/autoload.php';
+
+use NFePHP\Common\Certificate;
+use NFePHP\NFe\Tools;
+
 $dados = require 'dados.php';
 
-$certPfxPath = __DIR__ . $dados['certificadoPfx'];
-$senhaPfx = $dados['senhaPfx'];
-$certPemPath = __DIR__ . '/certificado.pem';
+echo "=== SOLUÇÃO DEFINITIVA ===\n";
 
-echo "=== CONVERSÃO USANDO APENAS PHP ===\n";
+$pemPath = __DIR__ . $dados['certificadoPem'];
+$configJsonPath = __DIR__ . $dados['configJson'];
+$senha = $dados['senhaPfx'];
 
-if (!file_exists($certPfxPath)) {
-    die("Certificado não encontrado: $certPfxPath\n");
-}
-
-// Método 1: Usando openssl_pkcs12_read (função nativa do PHP)
-$pfxContent = file_get_contents($certPfxPath);
-
-if (openssl_pkcs12_read($pfxContent, $certs, $senhaPfx)) {
-    echo "✓ Certificado lido com sucesso\n";
+try {
+    // 1. Lê o conteúdo PEM
+    $pemContent = file_get_contents($pemPath);
+    echo "✓ PEM lido: " . strlen($pemContent) . " bytes\n";
     
-    $pemContent = "";
+    // 2. Extrai componentes do PEM
+    $privateKey = '';
+    $certificate = '';
+    $extracerts = [];
     
-    if (!empty($certs['pkey'])) {
+    // Extrai chave privada
+    if (preg_match('/-----BEGIN.*PRIVATE KEY-----.*-----END.*PRIVATE KEY-----/s', $pemContent, $matches)) {
+        $privateKey = $matches[0];
         echo "✓ Chave privada extraída\n";
-        $pemContent .= $certs['pkey'] . "\n";
-        
-        // Verifica se a chave privada é válida
-        $pkey = openssl_pkey_get_private($certs['pkey']);
-        if ($pkey) {
-            echo "✓ Chave privada válida\n";
-            openssl_pkey_free($pkey);
-        } else {
-            echo "⚠ Chave privada pode ter problemas: " . openssl_error_string() . "\n";
-        }
-    }
-    
-    if (!empty($certs['cert'])) {
-        echo "✓ Certificado público extraído\n";
-        $pemContent .= $certs['cert'] . "\n";
-        
-        // Verifica se o certificado é válido
-        $x509 = openssl_x509_read($certs['cert']);
-        if ($x509) {
-            echo "✓ Certificado X509 válido\n";
-            $info = openssl_x509_parse($x509);
-            echo "  Válido até: " . date('d/m/Y', $info['validTo_time_t']) . "\n";
-            echo "  Emitente: " . $info['issuer']['O'] . "\n";
-            openssl_x509_free($x509);
-        } else {
-            echo "⚠ Certificado pode ter problemas: " . openssl_error_string() . "\n";
-        }
-    }
-    
-    // Salva o arquivo PEM
-    file_put_contents($certPemPath, $pemContent);
-    echo "✓ Certificado PEM salvo em: $certPemPath\n";
-    echo "✓ Tamanho do arquivo: " . filesize($certPemPath) . " bytes\n";
-    
-} else {
-    echo "✗ Erro ao ler certificado: " . openssl_error_string() . "\n";
-    
-    // Método 2: Tenta sem senha
-    echo "Tentando sem senha...\n";
-    if (openssl_pkcs12_read($pfxContent, $certs, '')) {
-        echo "✓ Certificado lido sem senha\n";
-        // ... repete o processo acima
     } else {
-        echo "✗ Também falhou sem senha: " . openssl_error_string() . "\n";
-        
-        // Método 3: Tenta com senhas comuns
-        $senhasComuns = ['', '1234', '123456', 'senha', 'password', 'certificado', '0101'];
-        foreach ($senhasComuns as $senha) {
-            if (openssl_pkcs12_read($pfxContent, $certs, $senha)) {
-                echo "✓ Certificado lido com senha: '$senha'\n";
-                // ... repete o processo de salvamento
-                break;
-            }
-        }
+        throw new Exception("Chave privada não encontrada no PEM");
     }
+    
+    // Extrai certificado principal
+    if (preg_match_all('/-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----/s', $pemContent, $matches)) {
+        $certificate = $matches[0][0]; // Primeiro certificado é o principal
+        echo "✓ Certificado principal extraído\n";
+        
+        // Certificados extras (cadeia)
+        if (count($matches[0]) > 1) {
+            $extracerts = array_slice($matches[0], 1);
+            echo "✓ Certificados da cadeia: " . count($extracerts) . "\n";
+        }
+    } else {
+        throw new Exception("Certificado não encontrado no PEM");
+    }
+    
+    // 3. Cria um PFX em memória
+    echo "Criando PFX em memória...\n";
+    $pfxContent = '';
+    
+    if (openssl_pkcs12_export($certificate, $pfxContent, $privateKey, $senha)) {
+        echo "✓ PFX criado em memória: " . strlen($pfxContent) . " bytes\n";
+    } else {
+        throw new Exception("Falha ao criar PFX: " . openssl_error_string());
+    }
+    
+    // 4. Lê o PFX com a NFePHP
+    $certificateObj = Certificate::readPfx($pfxContent, $senha);
+    echo "✓ Certificate::readPfx() bem-sucedido\n";
+    
+    // 5. Verifica o certificado
+    echo "✓ CNPJ: " . $certificateObj->getCnpj() . "\n";
+    echo "✓ Válido até: " . $certificateObj->getValidTo()->format('d/m/Y') . "\n";
+    echo "✓ Expirou: " . ($certificateObj->isExpired() ? 'SIM' : 'NÃO') . "\n";
+    
+    // 6. Instancia o Tools
+    $configJson = file_get_contents($configJsonPath);
+    $tools = new Tools($configJson, $certificateObj);
+    $tools->model(65);
+    echo "✓ Tools instanciado\n";
+    
+    echo "\n🎉 SUCESSO TOTAL! Certificado PEM convertido e funcionando.\n";
+    
+} catch (Exception $e) {
+    echo "✗ ERRO: " . $e->getMessage() . "\n";
 }

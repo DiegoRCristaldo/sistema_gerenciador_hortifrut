@@ -32,14 +32,14 @@ function getNfeTools(): Tools
     $config = getConfig();
 
     // Prioridade: PEM > PFX
-    $certPemPath = __DIR__ . '/certificados/certificado.pem';
+    $certPemPath = __DIR__ . $dados['certificadoPem'];
     $certPfxPath = __DIR__ . $dados['certificadoPfx'];
     
     if (file_exists($certPemPath)) {
         // Usa o certificado PEM convertido
         echo "Usando certificado PEM...\n";
         $certContent = file_get_contents($certPemPath);
-        $cert = Certificate::readPfx($certContent);
+        $cert = Certificate::readPem($certContent);
     } elseif (file_exists($certPfxPath)) {
         // Fallback para PFX (com tratamento de erro)
         echo "Usando certificado PFX (fallback)...\n";
@@ -337,32 +337,4 @@ function getCartaoIndex($formas_pagamento, $currentIndex) {
         }
     }
     return $cartaoCount;
-}
-
-function verificarConsistenciaDescontos($itensParaXml, $totalArray) {
-    $somaVDescItens = 0;
-    $somaVProdItens = 0;
-    
-    foreach ($itensParaXml as $item) {
-        $somaVDescItens += (float)$item['vDesc'];
-        $somaVProdItens += (float)$item['vProd'];
-    }
-    
-    $vDescTotal = (float)($totalArray['vDesc'] ?? 0);
-    $vProdTotal = (float)$totalArray['vProd'];
-    $vNFTotal = (float)$totalArray['vNF'];
-    
-    error_log("=== VERIFICAÇÃO DE CONSISTÊNCIA ===");
-    error_log("Soma vDesc itens: " . $somaVDescItens);
-    error_log("vDesc total: " . $vDescTotal);
-    error_log("Soma vProd itens: " . $somaVProdItens);
-    error_log("vProd total: " . $vProdTotal);
-    error_log("vNF total: " . $vNFTotal);
-    error_log("Diferença vDesc: " . ($vDescTotal - $somaVDescItens));
-    error_log("Cálculo esperado: " . ($vProdTotal - $vDescTotal) . " vs vNF: " . $vNFTotal);
-    
-    $diferencaVDesc = abs($vDescTotal - $somaVDescItens);
-    $diferencaVNF = abs(($vProdTotal - $vDescTotal) - $vNFTotal);
-    
-    return ($diferencaVDesc < 0.01 && $diferencaVNF < 0.01);
 }

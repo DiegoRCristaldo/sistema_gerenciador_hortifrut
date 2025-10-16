@@ -443,41 +443,30 @@ function atualizarIndicesPagamentos() {
 }
 
 function calcularTroco() {
-    const totalVendaElement = document.getElementById('total');
-    let totalVendaTexto = totalVendaElement.textContent.replace('R$', '').replace('.', '').replace(',', '.');
-    const totalVenda = parseFloat(totalVendaTexto);
-
-    const valorPagoInput = document.getElementById('valor-pago');
-    let valorPagoTexto = valorPagoInput.value.replace(/,/g, '.');
-    const valorPago = parseFloat(valorPagoTexto) || 0;
-
-    const troco = valorPago - totalVenda;
+    const totalVenda = parseCurrency(document.getElementById('total').textContent);
+    const valorPago = parseCurrency(document.getElementById('valor-pago').value);
+    
+    // CORREÇÃO: troco = valor pago - total venda
+    const troco = Math.max(0, valorPago - totalVenda);
+    
     document.getElementById('troco').textContent = formatarMoeda(troco);
     document.getElementById('troco_final').value = troco.toFixed(2);
 }
 
-// Atualize a função calcularTrocoMultipla
 function calcularTrocoMultipla() {
-    const totalVendaElement = document.getElementById('total');
-    let totalVendaTexto = totalVendaElement.textContent.replace('R$', '').replace('.', '').replace(',', '.');
-    const totalVenda = parseFloat(totalVendaTexto);
-
+    const totalVenda = parseCurrency(document.getElementById('total').textContent);
+    
+    const inputsValor = document.querySelectorAll('#pagamentos-extras input.valor-pagamento');
     let totalPago = 0;
-    document.querySelectorAll('#pagamentos-extras input.valor-pagamento').forEach(input => {
-        let valor = parseFloat(input.value.replace(/,/g, '.')) || 0;
-        totalPago += valor;
+    inputsValor.forEach(input => {
+        totalPago += parseCurrency(input.value);
     });
-
-    const troco = totalPago - totalVenda;
+    
+    // CORREÇÃO: troco = total pago - total venda
+    const troco = Math.max(0, totalPago - totalVenda);
+    
     document.getElementById('troco').textContent = formatarMoeda(troco);
     document.getElementById('troco_final').value = troco.toFixed(2);
-    
-    const trocoDiv = document.getElementById('troco-div');
-    if (totalPago > totalVenda) {
-        trocoDiv.style.display = 'block';
-    } else {
-        trocoDiv.style.display = 'none';
-    }
 }
 
 // Adicione esta função para inicializar os campos de cartão

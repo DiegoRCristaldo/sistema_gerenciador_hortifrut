@@ -1,80 +1,76 @@
 <?php
-// diagnostico_detalhado.php
+// teste_final_conversao.php
+require __DIR__ . '/vendor/autoload.php';
+
+use NFePHP\Common\Certificate;
+
 $dados = require 'dados.php';
 
-$certPfxPath = __DIR__ . $dados['certificadoPfx'];
-$senhaPfx = $dados['senhaPfx'];
+echo "=== TESTE FINAL DE CONVERSÃO ===\n";
 
-echo "=== DIAGNÓSTICO DETALHADO DO CERTIFICADO ===\n";
+$pemPath = __DIR__ . $dados['certificadoPem'];
+$senha = $dados['senhaPfx'];
 
-// Verifica se as funções OpenSSL estão disponíveis
-echo "OpenSSL disponível: " . (extension_loaded('openssl') ? 'SIM' : 'NÃO') . "\n";
-echo "Função openssl_pkcs12_read: " . (function_exists('openssl_pkcs12_read') ? 'SIM' : 'NÃO') . "\n";
-
-if (!file_exists($certPfxPath)) {
-    die("Arquivo não encontrado: $certPfxPath\n");
-}
-
-echo "Tamanho do arquivo: " . filesize($certPfxPath) . " bytes\n";
-
-// Tenta detectar o tipo de arquivo
-$content = file_get_contents($certPfxPath);
-$firstBytes = bin2hex(substr($content, 0, 4));
-
-echo "Primeiros bytes (hex): $firstBytes\n";
-
-// Verifica se é um PKCS12 válido
-if (strpos($firstBytes, '3082') === 0 || strpos($firstBytes, '300e') === 0) {
-    echo "✓ Estrutura PKCS12 detectada\n";
-} else {
-    echo "⚠ Estrutura não reconhecida como PKCS12\n";
-}
-
-// Tenta ler com a senha fornecida
-if (openssl_pkcs12_read($content, $certs, $senhaPfx)) {
-    echo "✓ Certificado lido com a senha fornecida\n";
-    analisarCertificado($certs);
-} else {
-    echo "✗ Falha com a senha fornecida: " . openssl_error_string() . "\n";
+function carregarCertificadoPem($pemContent, $password) {
+    echo "Extraindo componentes do PEM...\n";
     
-    // Tenta sem senha
-    if (openssl_pkcs12_read($content, $certs, '')) {
-        echo "✓ Certificado lido sem senha (o certificado não tem senha)\n";
-        analisarCertificado($certs);
+    // CORREÇÃO: Pattern corrigido
+    $privateKeyPattern = '/-----BEGIN PRIVATE KEY-----[\s\S]*?-----END PRIVATE KEY-----/';
+    $certificatePattern = '/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/';
+    
+    // Extrai chave privada
+    if (preg_match($privateKeyPattern, $pemContent, $privateMatches)) {
+        $privateKey = trim($privateMatches[0]);
+        echo "✓ Chave privada: " . strlen($privateKey) . " bytes\n";
     } else {
-        echo "✗ Também falhou sem senha: " . openssl_error_string() . "\n";
+        throw new Exception("Chave privada não encontrada");
     }
+    
+    // Extrai certificado
+    if (preg_match($certificatePattern, $pemContent, $certMatches)) {
+        $certificate = trim($certMatches[0]);
+        echo "✓ Certificado: " . strlen($certificate) . " bytes\n";
+    } else {
+        throw new Exception("Certificado não encontrado");
+    }
+    
+    // Valida com OpenSSL
+    echo "Validando com OpenSSL...\n";
+    if (!openssl_pkey_get_private($privateKey)) {
+        throw new Exception("Chave privada inválida: " . openssl_error_string());
+    }
+    
+    if (!openssl_x509_read($certificate)) {
+        throw new Exception("Certificado inválido: " . openssl_error_string());
+    }
+    echo "✓ Componentes válidos\n";
+    
+    // Cria PFX
+    echo "Criando PFX...\n";
+    $pfxContent = '';
+    if (!openssl_pkcs12_export($certificate, $pfxContent, $privateKey, $password)) {
+        throw new Exception("Falha ao criar PFX: " . openssl_error_string());
+    }
+    echo "✓ PFX criado: " . strlen($pfxContent) . " bytes\n";
+    
+    // Lê com NFePHP
+    echo "Lendo com NFePHP...\n";
+    return Certificate::readPfx($pfxContent, $password);
 }
 
-function analisarCertificado($certs) {
-    echo "\n--- ANÁLISE DO CERTIFICADO ---\n";
+try {
+    $pemContent = file_get_contents($pemPath);
+    echo "PEM lido: " . strlen($pemContent) . " bytes\n\n";
     
-    if (!empty($certs['pkey'])) {
-        echo "Chave privada: " . strlen($certs['pkey']) . " bytes\n";
-        
-        $pkey = openssl_pkey_get_private($certs['pkey']);
-        if ($pkey) {
-            $details = openssl_pkey_get_details($pkey);
-            echo "Tipo: " . ($details['type'] === 0 ? "RSA" : "Outro") . "\n";
-            echo "Bits: " . $details['bits'] . "\n";
-            openssl_pkey_free($pkey);
-        } else {
-            echo "ERRO na chave: " . openssl_error_string() . "\n";
-        }
-    }
+    $certificate = carregarCertificadoPem($pemContent, $senha);
     
-    if (!empty($certs['cert'])) {
-        echo "Certificado: " . strlen($certs['cert']) . " bytes\n";
-        
-        $x509 = openssl_x509_read($certs['cert']);
-        if ($x509) {
-            $info = openssl_x509_parse($x509);
-            echo "Subject: " . $info['name'] . "\n";
-            echo "Válido até: " . date('d/m/Y H:i:s', $info['validTo_time_t']) . "\n";
-            echo "Emissor: " . $info['issuer']['O'] . "\n";
-            openssl_x509_free($x509);
-        } else {
-            echo "ERRO no certificado: " . openssl_error_string() . "\n";
-        }
-    }
+    echo "\n=== CERTIFICADO CARREGADO ===\n";
+    echo "CNPJ: " . $certificate->getCnpj() . "\n";
+    echo "Válido até: " . $certificate->getValidTo()->format('d/m/Y') . "\n";
+    echo "Expirou: " . ($certificate->isExpired() ? 'SIM' : 'NÃO') . "\n";
+    
+    echo "\n🎉 CONVERSÃO BEM-SUCEDIDA! 🎉\n";
+    
+} catch (Exception $e) {
+    echo "✗ ERRO: " . $e->getMessage() . "\n";
 }
