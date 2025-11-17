@@ -35,19 +35,24 @@ CREATE TABLE operadores (
     tipo ENUM('admin', 'vendedor') DEFAUT 'vendedor'
 );
 
-CREATE TABLE produtos (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    nome VARCHAR(100),
-    preco DECIMAL(10,2),
-    codigo_barras VARCHAR(100) UNIQUE,
-    unidade_medida VARCHAR(10) NOT NULL DEFAULT 'UN'
-);
-ALTER TABLE produtos 
-ADD COLUMN ncm VARCHAR(8) NULL,
-ADD COLUMN cfop VARCHAR(4) NULL;
-UPDATE produtos SET cfop = '5102' WHERE cfop IS NULL;
-ALTER TABLE produtos 
-ALTER COLUMN cfop SET DEFAULT '5102';
+CREATE TABLE `produtos` (
+  `id` int(11) NOT NULL,
+  `nome` varchar(100) DEFAULT NULL,
+  `preco` decimal(10,2) DEFAULT NULL,
+  `codigo_barras` varchar(100) DEFAULT NULL,
+  `unidade_medida` varchar(10) NOT NULL DEFAULT 'UN',
+  `ncm` varchar(8) DEFAULT NULL,
+  `cfop` varchar(4) DEFAULT '5102'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE `produtos`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `codigo_barras` (`codigo_barras`),
+  ADD UNIQUE KEY `nome` (`nome`,`unidade_medida`);
+
+ALTER TABLE `produtos`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=288;
+COMMIT;
 
 CREATE TABLE unidades_produto (
     id INT AUTO_INCREMENT PRIMARY KEY,

@@ -36,7 +36,7 @@ if (!$dataInicio || !$dataFim) {
 }
 
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
-$limit = 10;
+$limit = 20;
 $offset = ($page - 1) * $limit;
 
 $query = "SELECT v.id, v.data, v.total, v.forma_pagamento, o.usuario AS operador 
@@ -154,26 +154,76 @@ require "view/header.php";
                         </tr>
                     <?php endwhile; ?>
                 <?php else: ?>
-                    <tr><td colspan="5" class="text-center">Nenhuma venda encontrada para o período selecionado.</td></tr>
+                    <tr><td colspan="6" class="text-center">Nenhuma venda encontrada para o período selecionado.</td></tr>
                 <?php endif; ?>
             </tbody>
             <tfoot class="table-light">
                 <tr>
                     <th colspan="2">Total Geral</th>
-                    <th colspan="3">R$ <?= number_format($totalGeral, 2, ',', '.') ?></th>
+                    <th colspan="4">R$ <?= number_format($totalGeral, 2, ',', '.') ?></th>
                 </tr>
             </tfoot>
         </table>
     </div>
 
-    <!-- TODO: Barra de paginação que precisa colocar limite mámimo de 10 -->
+    <!-- Barra de paginação com limite máximo de 10 páginas -->
     <nav class="no-print">
         <ul class="pagination justify-content-center">
-            <?php for ($i = 1; $i <= $totalPaginas; $i++): ?>
+            <?php
+            // Configuração da paginação - máximo 10 páginas visíveis
+            $maxPaginasVisiveis = 20;
+            $inicio = max(1, $page - floor($maxPaginasVisiveis / 2));
+            $fim = min($totalPaginas, $inicio + $maxPaginasVisiveis - 1);
+            
+            // Ajusta o início se estiver no final
+            $inicio = max(1, $fim - $maxPaginasVisiveis + 1);
+            
+            // Botão "Anterior"
+            if ($page > 1): ?>
+                <li class="page-item">
+                    <a class="page-link" href="?filtro=<?= $filtro ?>&data_inicio=<?= $dataInicio ?>&data_fim=<?= $dataFim ?>&page=<?= $page - 1 ?>">&laquo; Anterior</a>
+                </li>
+            <?php endif; ?>
+
+            <?php
+            // Primeira página (se não estiver no início)
+            if ($inicio > 1): ?>
+                <li class="page-item">
+                    <a class="page-link" href="?filtro=<?= $filtro ?>&data_inicio=<?= $dataInicio ?>&data_fim=<?= $dataFim ?>&page=1">1</a>
+                </li>
+                <?php if ($inicio > 2): ?>
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                <?php endif; ?>
+            <?php endif; ?>
+
+            <?php for ($i = $inicio; $i <= $fim; $i++): ?>
                 <li class="page-item <?= $i == $page ? 'active' : '' ?>">
                     <a class="page-link" href="?filtro=<?= $filtro ?>&data_inicio=<?= $dataInicio ?>&data_fim=<?= $dataFim ?>&page=<?= $i ?>"><?= $i ?></a>
                 </li>
             <?php endfor; ?>
+
+            <?php
+            // Última página (se não estiver no final)
+            if ($fim < $totalPaginas): ?>
+                <?php if ($fim < $totalPaginas - 1): ?>
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                <?php endif; ?>
+                <li class="page-item">
+                    <a class="page-link" href="?filtro=<?= $filtro ?>&data_inicio=<?= $dataInicio ?>&data_fim=<?= $dataFim ?>&page=<?= $totalPaginas ?>"><?= $totalPaginas ?></a>
+                </li>
+            <?php endif; ?>
+
+            <?php
+            // Botão "Próxima"
+            if ($page < $totalPaginas): ?>
+                <li class="page-item">
+                    <a class="page-link" href="?filtro=<?= $filtro ?>&data_inicio=<?= $dataInicio ?>&data_fim=<?= $dataFim ?>&page=<?= $page + 1 ?>">Próxima &raquo;</a>
+                </li>
+            <?php endif; ?>
         </ul>
     </nav>
 

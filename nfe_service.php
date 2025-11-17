@@ -134,25 +134,26 @@ function gerarXmlNfce($dadosVenda, $desconto) {
     $enderEmit->fone = $dadosVenda['emit']['enderEmit']['fone'] ?? ''; // Opcional, mas bom ter
     $nfe->tagenderEmit($enderEmit); 
 
-    /*
     // -----------------------
     // Destinatário
     // -----------------------
-    $cpf_dest = $dadosVenda['dest']['CPF'] ?? null;
-    
-    $dest = new \stdClass();
-    
-    if (!empty($cpf_dest) && $cpf_dest !== '00000000000') {
-        $dest->CPF = $cpf_dest;
-        // A NFePHP e/ou a Sefaz irão lidar com xNome e indIEDest em ambiente de teste.
-    } else {
-        // Consumidor não identificado (CPF nulo ou '000...0'):
-        // O objeto $dest permanece vazio.
-        // A NFePHP (se tpAmb=2) adicionará 'xNome' (NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO...)
-        // e 'indIEDest=9' automaticamente.
+    if($ide->tpAmb == 2){
+        $cpf_dest = $dadosVenda['dest']['CPF'] ?? null;
+        
+        $dest = new \stdClass();
+        
+        if (!empty($cpf_dest) && $cpf_dest !== '00000000000') {
+            $dest->CPF = $cpf_dest;
+            // A NFePHP e/ou a Sefaz irão lidar com xNome e indIEDest em ambiente de teste.
+        } else {
+            // Consumidor não identificado (CPF nulo ou '000...0'):
+            // O objeto $dest permanece vazio.
+            // A NFePHP (se tpAmb=2) adicionará 'xNome' (NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO...)
+            // e 'indIEDest=9' automaticamente.
+        }
+        
+        $nfe->tagdest($dest);
     }
-    
-    $nfe->tagdest($dest);*/
 
     // -----------------------
     // Produtos/Itens
@@ -326,6 +327,118 @@ function gerarXmlNfce($dadosVenda, $desconto) {
     }
 
     return $nfe->getXML();
+}
+
+/**
+ * CORREÇÃO PARA ERRO 865 - Valida e ajusta consistência entre pagamentos e total da NF
+ * Garante que total dos pagamentos seja >= total da NF
+ */
+function validarConsistenciaPagamentos(&$dadosVenda, $totalNF) {
+    $totalPago = 0;
+    
+    // Calcula o total pago
+    foreach ($dadosVenda['pagamentos'] as $pagamento) {
+        $totalPago += $pagamento['vPag'];
+    }
+    
+    $totalPago = round($totalPago, 2);
+    $totalNF = round($totalNF, 2);
+    
+    // Se houver diferença, ajusta o primeiro pagamento
+    $diferenca = round($totalNF - $totalPago, 2);
+    
+    if (abs($diferenca) > 0.001 && count($dadosVenda['pagamentos']) > 0) {
+        $dadosVenda['pagamentos'][0]['vPag'] = round($dadosVenda['pagamentos'][0]['vPag'] + $diferenca, 2);
+        error_log("AJUSTE 865: Diferença=$diferenca, TotalNF=$totalNF, TotalPagoAntes=$totalPago, Novo vPag=" . $dadosVenda['pagamentos'][0]['vPag']);
+    }
+    
+    // Validação final
+    $totalPagoAjustado = 0;
+    foreach ($dadosVenda['pagamentos'] as $pagamento) {
+        $totalPagoAjustado += $pagamento['vPag'];
+    }
+    
+    $totalPagoAjustado = round($totalPagoAjustado, 2);
+    
+    if (abs($totalPagoAjustado - $totalNF) > 0.01) {
+        error_log("ERRO CRÍTICO 865: Não foi possível ajustar pagamentos. TotalNF=$totalNF, TotalPago=$totalPagoAjustado");
+        return false;
+    }
+    
+    error_log("VALIDAÇÃO 865 OK: TotalNF=$totalNF, TotalPago=$totalPagoAjustado");
+    return true;
+}
+
+/**
+ * CORREÇÃO PARA ERRO 869 - Valida e ajusta consistência do troco
+ * Garante que vTroco = vPag - vNF
+ */
+function validarConsistenciaTroco(&$dadosVenda, $totalNF) {
+    $totalPago = 0;
+    foreach ($dadosVenda['pagamentos'] as $pagamento) {
+        $totalPago += $pagamento['vPag'];
+    }
+    
+    $totalPago = round($totalPago, 2);
+    $totalNF = round($totalNF, 2);
+    
+    // CORREÇÃO: A fórmula correta é vTroco = vPag - vNF
+    $trocoCalculado = round($totalPago - $totalNF, 2);
+    
+    // NUNCA pode ter troco negativo
+    if ($trocoCalculado < 0) {
+        $trocoCalculado = 0;
+    }
+    
+    $dadosVenda['troco'] = $trocoCalculado;
+    
+    // Validação final
+    $validacao = round($totalPago - $trocoCalculado, 2);
+    
+    if (abs($validacao - $totalNF) > 0.001) {
+        // Ajuste forçado
+        $dadosVenda['troco'] = round($totalPago - $totalNF, 2);
+        error_log("AJUSTE 869: vPag=$totalPago, vNF=$totalNF, vTroco=" . $dadosVenda['troco']);
+    }
+    
+    error_log("VALIDAÇÃO 869 OK: $totalPago - " . $dadosVenda['troco'] . " = " . ($totalPago - $dadosVenda['troco']) . " | vNF = $totalNF");
+    return true;
+}
+
+/**
+ * CORREÇÃO PARA ERRO 629 - Valida consistência matemática dos itens
+ * Garante que vProd = vUnCom × qCom para cada item
+ */
+function validarConsistenciaItens(&$itensParaXml) {
+    $erros = [];
+    
+    foreach ($itensParaXml as $index => &$item) {
+        // Calcula o valor esperado
+        $valorEsperado = round($item['vUnCom'] * $item['qCom'], 6);
+        $valorEsperado = round($valorEsperado, 2);
+        
+        $valorAtual = round($item['vProd'], 2);
+        
+        // Verifica se há diferença maior que a tolerância (R$ 0,01)
+        if (abs($valorEsperado - $valorAtual) > 0.01) {
+            // CORREÇÃO: Ajusta o vProd para o valor correto
+            $item['vProd'] = $valorEsperado;
+            
+            error_log("CORREÇÃO 629: Item " . ($index + 1) . 
+                     " - vUnCom=" . $item['vUnCom'] . 
+                     " × qCom=" . $item['qCom'] . 
+                     " = " . $valorEsperado . 
+                     " (era $valorAtual)");
+            
+            $erros[] = "Item " . ($index + 1) . " ajustado";
+        }
+    }
+    
+    if (!empty($erros)) {
+        error_log("ERROS 629 CORRIGIDOS: " . implode(", ", $erros));
+    }
+    
+    return empty($erros);
 }
 
 // Função auxiliar para calcular o índice correto dos dados do cartão

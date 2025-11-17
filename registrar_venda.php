@@ -30,6 +30,7 @@ function carregarCertificadoPem($pemContent, $password) {
     
     return Certificate::readPfx($pfxContent, $password);
 }
+
 // Define o fuso horário padrão do PHP. Essencial para dhEmi e dhSaiEnt no XML.
 date_default_timezone_set('America/Sao_Paulo'); 
 
@@ -49,7 +50,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $quantidades = $_POST['quantidade'] ?? []; // Quantidades de cada produto vendido
     $desconto = isset($_POST['desconto']) ? (float)$_POST['desconto'] : 0; // Desconto total na venda
     $formas_pagamento = $_POST['forma_pagamento'] ?? []; // Formas de pagamento
-    $valores_pagamento = $_POST['valor_pago'] ?? []; // Valores pagos por cada forma
+    $valores_pagamento = $_POST['valor_pagamento'] ?? []; // Valores pagos por cada forma
     $total = 0; // Inicializa o total da venda
 
     $troco_final = isset($_POST['troco_final']); // Troco calculado
@@ -131,11 +132,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
 
-    // Calcula total e monta array de itens para o XML da NFC-e.
+    // ========== CORREÇÃO CRÍTICA: CÁLCULO DOS VALORES PARA XML ==========
+    
     $itensParaXml = [];
     $valorTotalProdutos = 0;
+    $descontoFinal = 0;
 
-    // Primeiro, calcula o valor total dos produtos (sem desconto)
+    // PRIMEIRO PASSO: Calcular valor total dos produtos (SEM desconto)
     foreach ($quantidades as $id => $qtd) {
         $id = (int)$id;
         $qtd = (float)$qtd;
@@ -147,14 +150,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $produto = $res->fetch_assoc();
 
         $preco = (float)$produto['preco'];
-        $valorProduto = $preco * $qtd;
-        $valorTotalProdutos += $valorProduto;
+        
+        // CORREÇÃO: vProd deve ser o valor BRUTO (vUnCom × qCom)
+        $valorBruto = $preco * $qtd;
+        $valorTotalProdutos += $valorBruto;
     }
 
-    // Agora distribui o desconto proporcionalmente com precisão
+    // SEGUNDO PASSO: Distribuir desconto proporcionalmente
     $somaDescontosItens = 0;
     $ultimoIndex = null;
-    $itensParaXml = []; // Reinicia o array
 
     foreach ($quantidades as $id => $qtd) {
         $id = (int)$id;
@@ -178,7 +182,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         $somaDescontosItens += $descontoItem;
         
-        // CORREÇÃO: vProd é o valor BRUTO, o líquido será calculado depois
+        // CORREÇÃO CRÍTICA: vProd é o valor BRUTO, vDesc é o desconto individual
         $itensParaXml[] = [
             'id' => $produto['id'],
             'cProd' => $produto['id'],
@@ -189,8 +193,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             'uCom' => $produto['unidade_medida'] ?? 'UN',
             'qCom' => $qtd,
             'vUnCom' => $preco,
-            'vProd' => round($valorBruto, 2), // VALOR BRUTO (antes do desconto)
-            'vDesc' => round($descontoItem, 2),
+            'vProd' => round($valorBruto, 2), // VALOR BRUTO (vUnCom × qCom)
+            'vDesc' => round($descontoItem, 2), // Desconto individual
             'cEANTrib' => $produto['codigo_barras'] ?? 'SEM GTIN',
             'uTrib' => $produto['unidade_medida'] ?? 'UN',
             'qTrib' => $qtd,
@@ -201,31 +205,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $ultimoIndex = count($itensParaXml) - 1;
     }
 
-    // Ajusta diferenças de arredondamento com precisão
+    // TERCEIRO PASSO: Ajustar diferenças de arredondamento
     $diferenca = round($desconto - $somaDescontosItens, 2);
 
-    if (abs($diferenca) > 0.009 && $ultimoIndex !== null && count($itensParaXml) > 0) {
+    if (abs($diferenca) > 0.001 && $ultimoIndex !== null && count($itensParaXml) > 0) {
         // Ajusta a diferença no último item
         $itensParaXml[$ultimoIndex]['vDesc'] = round(
             $itensParaXml[$ultimoIndex]['vDesc'] + $diferenca, 
             2
         );
         
-        // Recalcula o valor do produto com desconto ajustado
-        $itensParaXml[$ultimoIndex]['vProd'] = round(
-            $itensParaXml[$ultimoIndex]['vUnCom'] * $itensParaXml[$ultimoIndex]['qCom'] - 
-            $itensParaXml[$ultimoIndex]['vDesc'],
-            2
-        );
+        // IMPORTANTE: NÃO altera o vProd - ele deve permanecer como valor bruto
+        // O vProd NÃO deve ser recalculado como (vUnCom × qCom) - vDesc
     }
 
-    // Recalcula totais finais após ajustes - CORREÇÃO IMPORTANTE
+    // QUARTO PASSO: Recalcular totais finais
     $valorTotalProdutosFinal = 0;
     $descontoFinal = 0;
 
     foreach ($itensParaXml as $item) {
-        // CORREÇÃO: vProd deve ser o valor BRUTO (antes do desconto)
-        // O valor líquido é vProd - vDesc
+        // CORREÇÃO: vProd deve permanecer como valor BRUTO
         $valorBrutoItem = $item['vProd'];
         $valorTotalProdutosFinal += $valorBrutoItem;
         $descontoFinal += $item['vDesc'];
@@ -234,26 +233,29 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Garante que o total da NF está correto
     $totalNF = round($valorTotalProdutosFinal - $descontoFinal, 2);
 
-    // VERIFICAÇÃO DE CONSISTÊNCIA CRÍTICA
-    $somaVDescItens = round($descontoFinal, 2);
-    $somaVProdItens = round($valorTotalProdutosFinal, 2);
+    // VERIFICAÇÃO DE CONSISTÊNCIA CRÍTICA - VALIDAÇÃO 629
+    $errosValidacao = [];
+    foreach ($itensParaXml as $index => $item) {
+        $vProdCalculado = round($item['vUnCom'] * $item['qCom'], 2);
+        $vProdInformado = round($item['vProd'], 2);
+        
+        // Verifica se a diferença é maior que 0.01 (tolerância SEFAZ)
+        if (abs($vProdCalculado - $vProdInformado) > 0.01) {
+            $errosValidacao[] = "Item {$index}: vProd calculado ({$vProdCalculado}) ≠ vProd informado ({$vProdInformado})";
+        }
+    }
 
-    // Se houver diferença significativa, ajusta no último item
-    if (abs($desconto - $somaVDescItens) > 0.01 && $ultimoIndex !== null && count($itensParaXml) > 0) {
-        $ajuste = round($desconto - $somaVDescItens, 2);
-        $itensParaXml[$ultimoIndex]['vDesc'] = round($itensParaXml[$ultimoIndex]['vDesc'] + $ajuste, 2);
-        
-        // Recalcula o vProd mantendo o valor bruto correto
-        $valorBruto = $itensParaXml[$ultimoIndex]['vUnCom'] * $itensParaXml[$ultimoIndex]['qCom'];
-        $itensParaXml[$ultimoIndex]['vProd'] = round($valorBruto - $itensParaXml[$ultimoIndex]['vDesc'], 2);
-        
-        // Recalcula totais após ajuste
+    if (!empty($errosValidacao)) {
+        error_log("ERRO VALIDAÇÃO 629: " . implode("; ", $errosValidacao));
+        // Corrige automaticamente os valores problemáticos
+        foreach ($itensParaXml as &$item) {
+            $vProdCalculado = round($item['vUnCom'] * $item['qCom'], 2);
+            $item['vProd'] = $vProdCalculado; // Força o valor correto
+        }
+        // Recalcula totais após correção
         $valorTotalProdutosFinal = 0;
-        $descontoFinal = 0;
         foreach ($itensParaXml as $item) {
-            $valorBrutoItem = $item['vProd'];
-            $valorTotalProdutosFinal += $valorBrutoItem;
-            $descontoFinal += $item['vDesc'];
+            $valorTotalProdutosFinal += $item['vProd'];
         }
         $totalNF = round($valorTotalProdutosFinal - $descontoFinal, 2);
     }
@@ -265,11 +267,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         'vICMS' => 0
     ];
 
-    // SEMPRE adicione vDesc, mesmo que zero (a NFePHP vai omitir se for zero)
-    $totalArray['vDesc'] = round($descontoFinal, 2);
-
     // Adiciona vDesc apenas se houver desconto
-    if ($descontoFinal > 0) {
+    if($dados['tpAmb'] == '1'){
+        if ($descontoFinal > 0) {
+            $totalArray['vDesc'] = round($descontoFinal, 2);
+        }
+    }
+    else {
         $totalArray['vDesc'] = round($descontoFinal, 2);
     }
 
@@ -286,8 +290,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         'Cartão de Débito'  => '04',
         'PIX'               => '20' // PIX estático = 20, PIX dinâmico = 17
     ];
-
-    // Substitua a geração aleatória do nNF por esta abordagem sequencial:
 
     // Obtém o próximo número sequencial
     $stmt = $conn->prepare("SELECT ultimo_numero FROM numeracao_nfe WHERE id = 1 FOR UPDATE");
@@ -308,58 +310,80 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $cNF = str_pad(random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
 
     // Monta o array de dados da venda para o XML da NFC-e.
-    $dadosVenda = [
-        'ide' => [
-            'cUF' => '21', // Código da UF (MA - Maranhão), fixo para o emitente.
-            'cNF' => $cNF, // Usa o cNF gerado acima
-            'natOp' => 'VENDA', 'indPag' => 0, 'mod' => '65',
-            'serie' => 1, 
-            'nNF' => $nNF_gerado,
-            'dhEmi' => date('Y-m-d\TH:i:sP'), // Data e hora de emissão com fuso horário
-            'dhSaiEnt' => date('Y-m-d\TH:i:sP'), // Data e hora de saída/entrada com fuso horário
-            'tpNF' => 1, 'idDest' => 1, 
-            'cMunFG' => $dados['enderecoEmitente']['cMun'], // Código IBGE do município do emitente
-            'tpImp' => 4, //Valor 4 - DANFE NFC-e ou 5 - DANFE NFC-e em mensagem eletrônica.
-            'tpEmis' => 1, 
-            // A linha 'cDV' foi REMOVIDA para que a NFePHP calcule automaticamente.
-            'tpAmb' => 1, // 1 = Produção, 2 = Homologação
-            'finNFe' => 1, 'indFinal' => 1, 'indPres' => 1, 'procEmi' => 0, 'verProc' => 'PDV-1.0'
-        ],
-        'emit' => [
-            'CNPJ' => $cnpjEmitente,
-            'xNome' => $dados['razaoSocial'], // Razão Social do dados.php
-            'xFant' => $dados['razaoSocial'], // Nome Fantasia (usando Razão Social por simplicidade)
-            'enderEmit' => [ // Dados de endereço do emitente do dados.php
-                'xLgr' => $dados['enderecoEmitente']['xLgr'],
-                'nro' => $dados['enderecoEmitente']['nro'],
-                'xCpl' => $dados['enderecoEmitente']['xCpl'], 
-                'xBairro' => $dados['enderecoEmitente']['xBairro'],
-                'cMun' => $dados['enderecoEmitente']['cMun'], 
-                'xMun' => $dados['enderecoEmitente']['xMun'],
-                'UF' => $dados['enderecoEmitente']['UF'],
-                'CEP' => $dados['enderecoEmitente']['CEP'],
-                'fone' => $dados['enderecoEmitente']['fone']
-            ],
-            'IE' => $dados['ieEmitente'], // Inscrição Estadual do dados.php
-            'CRT' => 1 // Código de Regime Tributário (1=Simples Nacional)
-        ],
-        /*'dest' => [ // Dados do destinatário (consumidor)
-            //'CPF' => $dados['cpfTeste'],
-            //'xNome' => "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL" -> quando o tpAmb é 2
-            // 'indIEDest' NÃO DEVEM ser incluídos aqui em ambiente de produção
-            // se o CPF for informado, a Sefaz pode rejeitar ou sobrescrever.
-        ],*/
-        'itens' => $itensParaXml, // Itens da venda para o XML
-        'total' => $totalArray,
-        'pagamentos' => [], // Inicializa o array de pagamentos
-        'troco' => $troco_final, // Troco da venda
-        'infRespTec' => [ // Informações do Responsável Técnico (opcional)
-            'CNPJ' => $cnpjEmitente,
-            'xContato' => 'DIEGO RODRIGUES CRISTALDO',
-            'fone' => '19989909456',
-            'email' => 'diegorcristaldo@hotmail.com'
-        ]
+    $ide = [
+        'cUF' => '21', // Código da UF (MA - Maranhão), fixo para o emitente.
+        'cNF' => $cNF, // Usa o cNF gerado acima
+        'natOp' => 'VENDA', 'indPag' => 0, 'mod' => '65',
+        'serie' => 1, 
+        'nNF' => $nNF_gerado,
+        'dhEmi' => date('Y-m-d\TH:i:sP'), // Data e hora de emissão com fuso horário
+        'dhSaiEnt' => date('Y-m-d\TH:i:sP'), // Data e hora de saída/entrada com fuso horário
+        'tpNF' => 1, 'idDest' => 1, 
+        'cMunFG' => $dados['enderecoEmitente']['cMun'], // Código IBGE do município do emitente
+        'tpImp' => 4, //Valor 4 - DANFE NFC-e ou 5 - DANFE NFC-e em mensagem eletrônica.
+        'tpEmis' => 1, 
+        // A linha 'cDV' foi REMOVIDA para que a NFePHP calcule automaticamente.
+        'tpAmb' => $dados['tpAmb'], // 1 = Produção, 2 = Homologação
+        'finNFe' => 1, 'indFinal' => 1, 'indPres' => 1, 'procEmi' => 0, 'verProc' => 'PDV-1.0'
     ];
+    $emit = [
+        'CNPJ' => $cnpjEmitente,
+        'xNome' => $dados['razaoSocial'], // Razão Social do dados.php
+        'xFant' => $dados['razaoSocial'], // Nome Fantasia (usando Razão Social por simplicidade)
+        'enderEmit' => [ // Dados de endereço do emitente do dados.php
+            'xLgr' => $dados['enderecoEmitente']['xLgr'],
+            'nro' => $dados['enderecoEmitente']['nro'],
+            'xCpl' => $dados['enderecoEmitente']['xCpl'], 
+            'xBairro' => $dados['enderecoEmitente']['xBairro'],
+            'cMun' => $dados['enderecoEmitente']['cMun'], 
+            'xMun' => $dados['enderecoEmitente']['xMun'],
+            'UF' => $dados['enderecoEmitente']['UF'],
+            'CEP' => $dados['enderecoEmitente']['CEP'],
+            'fone' => $dados['enderecoEmitente']['fone']
+        ],
+        'IE' => $dados['ieEmitente'], // Inscrição Estadual do dados.php
+        'CRT' => 1 // Código de Regime Tributário (1=Simples Nacional)
+    ];
+    $dest = [ // Dados do destinatário (consumidor)
+        'CPF' => $dados['cpfTeste'],
+        'xNome' => "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL" //-> quando o tpAmb é 2
+        // 'indIEDest' NÃO DEVEM ser incluídos aqui em ambiente de produção
+        // se o CPF for informado, a Sefaz pode rejeitar ou sobrescrever.
+    ];
+    $itens = $itensParaXml; // Itens da venda para o XML
+    $total = $totalArray;
+    $pagamentos = []; // Inicializa o array de pagamentos
+    $troco = $troco_final; // Troco da venda
+    $infRespTec = [ // Informações do Responsável Técnico (opcional)
+        'CNPJ' => $cnpjEmitente,
+        'xContato' => 'DIEGO RODRIGUES CRISTALDO',
+        'fone' => '19989909456',
+        'email' => 'diegorcristaldo@hotmail.com'
+    ];
+
+    if($ide['tpAmb'] == 1){
+        $dadosVenda = [
+            'ide' => $ide,
+            'emit' => $emit,
+            'itens' => $itensParaXml, // Itens da venda para o XML
+            'total' => $totalArray,
+            'pagamentos' => [], // Inicializa o array de pagamentos
+            'troco' => $troco_final, // Troco da venda
+            'infRespTec' => $infRespTec
+        ];
+    }
+    else {
+        $dadosVenda = [
+            'ide' => $ide,
+            'emit' => $emit,
+            'dest' => $dest, //Só é incluida em Ambiente de homologação tpAmb = 2
+            'itens' => $itensParaXml, // Itens da venda para o XML
+            'total' => $totalArray,
+            'pagamentos' => [], // Inicializa o array de pagamentos
+            'troco' => $troco_final, // Troco da venda
+            'infRespTec' => $infRespTec
+        ];
+    }
 
     // Monta os pagamentos para o XML
     $dadosVenda['pagamentos'] = [];
@@ -406,33 +430,28 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $totalPagoNfce += $valor_pag;
     }
 
-    // Calcula o troco final para a NFC-e.
-    $totalPagoNfce = 0;
-    foreach ($dadosVenda['pagamentos'] as $pagamento) {
-        $totalPagoNfce += $pagamento['vPag'];
+    // === VALIDAÇÕES DE CONSISTÊNCIA ===
+
+    // CORREÇÃO ERRO 865 - Garante que total dos pagamentos >= total da NF
+    if (!validarConsistenciaPagamentos($dadosVenda, $totalNF)) {
+        $_SESSION['flash'] = 'Erro na consistência dos pagamentos. Contate o suporte.';
+        header("Location: comprovante.php?id_venda=$venda_id");
+        exit;
     }
 
-    // CORREÇÃO: Garante precisão de 2 casas decimais
-    $totalPagoNfce = round($totalPagoNfce, 2);
-    $totalNF = round($totalNF, 2);
-
-    // CORREÇÃO: A fórmula correta é vTroco = vPag - vNF
-    $trocoNfce = round($totalPagoNfce - $totalNF, 2);
-
-    // NUNCA pode ter troco negativo
-    if ($trocoNfce < 0) {
-        $trocoNfce = 0;
+    // CORREÇÃO ERRO 869 - Garante que vTroco = vPag - vNF
+    if (!validarConsistenciaTroco($dadosVenda, $totalNF)) {
+        $_SESSION['flash'] = 'Erro no cálculo do troco. Contate o suporte.';
+        header("Location: comprovante.php?id_venda=$venda_id");
+        exit;
     }
 
-    // VALIDAÇÃO FINAL - Garante que a fórmula seja exata
-    $validacao = round($totalPagoNfce - $trocoNfce, 2);
-    if (abs($validacao - $totalNF) > 0.001) {
-        // Se ainda houver diferença, ajusta o troco para forçar a fórmula
-        $trocoNfce = round($totalPagoNfce - $totalNF, 2);
-        error_log("AJUSTE FORÇADO: vPag=$totalPagoNfce, vNF=$totalNF, vTroco=$trocoNfce");
+    // LOG FINAL
+    $totalPagoFinal = 0;
+    foreach ($dadosVenda['pagamentos'] as $pag) {
+        $totalPagoFinal += $pag['vPag'];
     }
-
-    $dadosVenda['troco'] = $trocoNfce;
+    error_log("VALIDAÇÃO FINAL: vNF=$totalNF, vPag=$totalPagoFinal, vTroco=" . $dadosVenda['troco']);
 
     // --- Início do processo de assinatura e envio via NFePHP ---
     if (!file_exists(__DIR__ . '/vendor/autoload.php')) {
@@ -450,6 +469,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $tools = new Tools($configJson, $certificate);
         
         $tools->model(65); // Define o modelo como NFC-e
+
+        // Aplica as validações
+        validarConsistenciaPagamentos($dadosVenda, $totalNF);
+        validarConsistenciaTroco($dadosVenda, $totalNF);
 
         // Gera o XML não-assinado.
         $xml = gerarXmlNfce($dadosVenda, $desconto);
@@ -648,76 +671,71 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     } catch (Exception $e) {
                         error_log("Erro ao atualizar banco: " . $e->getMessage());
                     }
-
-                    // CONSULTA RECIBO COM RETRY
-                    $maxTentativas = 3;
-                    $consultaSucesso = false;
                     
-                    for ($tentativa = 1; $tentativa <= $maxTentativas; $tentativa++) {
-                        sleep($tentativa * 2); // Espera progressiva
-                        
-                        try {
-                            $consulta = $tools->sefazConsultaRecibo($nRec);
-                            $stdCons = $st->toStd($consulta);
+                    sleep(2);
+                    
+                    try {
+                        $consulta = $tools->sefazConsultaRecibo($nRec);
+                        $stdCons = $st->toStd($consulta);
 
-                            if (isset($stdCons->cStat) && (string)$stdCons->cStat === '100') { // Autorizado após consulta
-                                $protocolo = (string)$stdCons->protNFe->infProt->nProt;
-                                $chave = (string)$stdCons->protNFe->infProt->chNFe;
+                        if (isset($stdCons->cStat) && (string)$stdCons->cStat === '100') { // Autorizado após consulta
+                            $protocolo = (string)$stdCons->protNFe->infProt->nProt;
+                            $chave = (string)$stdCons->protNFe->infProt->chNFe;
 
-                                $nfeProc = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-                                $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
-                                $nfeProc .= '<protNFe versao="4.00"><infProt><tpAmb>' . $dadosVenda['ide']['tpAmb'] . '</tpAmb><verAplic>' . ($stdCons->protNFe->infProt->verAplic ?? '') . '</verAplic><chNFe>' . $chave . '</chNFe><dhRecbto>' . ($stdCons->protNFe->infProt->dhRecbto ?? '') . '</dhRecbto><nProt>' . $protocolo . '</nProt><digVal>' . ($stdCons->protNFe->infProt->digVal ?? '') . '</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>';
+                            $nfeProc = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
+                            $nfeProc .= str_replace('<?xml version="1.0" encoding="UTF-8"?>', '', $xmlAssinado);
+                            $nfeProc .= '<protNFe versao="4.00"><infProt><tpAmb>' . $dadosVenda['ide']['tpAmb'] . '</tpAmb><verAplic>' . ($stdCons->protNFe->infProt->verAplic ?? '') . '</verAplic><chNFe>' . $chave . '</chNFe><dhRecbto>' . ($stdCons->protNFe->infProt->dhRecbto ?? '') . '</dhRecbto><nProt>' . $protocolo . '</nProt><digVal>' . ($stdCons->protNFe->infProt->digVal ?? '') . '</digVal><cStat>100</cStat><xMotivo>Autorizado o uso da NF-e</xMotivo></infProt></protNFe>';
+                            
+                            $autFile = __DIR__ . '/xml_autorizado/venda_' . $venda_id . '_autorizada.xml';
+                            file_put_contents($autFile, $nfeProc);
+
+                            // Atualiza o banco de dados
+                            try {
+                                $stmtUpd = $conn->prepare("UPDATE vendas SET chave_nfe = ?, protocolo = ?, status_nf = ? WHERE id = ?");
+                                $status_nf_db = 'AUTORIZADA';
+                                $stmtUpd->bind_param("sssi", $chave, $protocolo, $status_nf_db, $venda_id);
+                                $stmtUpd->execute();
+                            } catch (Exception $e) {
+                                error_log("Erro ao atualizar banco: " . $e->getMessage());
+                            }
+
+                            // GERA O DANFE
+                            try {
+                                $danfe = new Danfce($nfeProc);
+                                $danfe->montaDANFE();
+                                $pdfData = $danfe->render();
                                 
-                                $autFile = __DIR__ . '/xml_autorizado/venda_' . $venda_id . '_autorizada.xml';
-                                file_put_contents($autFile, $nfeProc);
-
-                                // Atualiza o banco de dados
-                                try {
-                                    $stmtUpd = $conn->prepare("UPDATE vendas SET chave_nfe = ?, protocolo = ?, status_nf = ? WHERE id = ?");
-                                    $status_nf_db = 'AUTORIZADA';
-                                    $stmtUpd->bind_param("sssi", $chave, $protocolo, $status_nf_db, $venda_id);
-                                    $stmtUpd->execute();
-                                } catch (Exception $e) {
-                                    error_log("Erro ao atualizar banco: " . $e->getMessage());
+                                // Salva o DANFE em PDF
+                                $pdfFile = __DIR__ . '/danfes/venda_' . $venda_id . '_danfe.pdf';
+                                if (!is_dir(__DIR__ . '/danfes')) {
+                                    mkdir(__DIR__ . '/danfes', 0755, true);
                                 }
-
-                                // GERA O DANFE
-                                try {
-                                    $danfe = new Danfce($nfeProc);
-                                    $danfe->montaDANFE();
-                                    $pdfData = $danfe->render();
-                                    
-                                    // Salva o DANFE em PDF
-                                    $pdfFile = __DIR__ . '/danfes/venda_' . $venda_id . '_danfe.pdf';
-                                    if (!is_dir(__DIR__ . '/danfes')) {
-                                        mkdir(__DIR__ . '/danfes', 0755, true);
-                                    }
-                                    file_put_contents($pdfFile, $pdfData);
-                                    
-                                    $_SESSION['flash'] = 'NFC-e Autorizada com sucesso (via consulta)! DANFE gerado.';
-                                    header("Location: comprovante.php?id_venda=$venda_id&nf=ok&danfe=" . urlencode($pdfFile));
-                                    exit();
-                                    
-                                } catch (Exception $e) {
-                                    error_log("Erro ao gerar DANFE: " . $e->getMessage());
-                                    $_SESSION['flash'] = 'NFC-e Autorizada, mas erro ao gerar DANFE: ' . $e->getMessage();
-                                    header("Location: comprovante.php?id_venda=$venda_id&nf=ok");
-                                    exit();
-                                }
-                            } else {
-                                $motivo = isset($stdCons->xMotivo) ? (string)$stdCons->xMotivo : 'sem motivo';
-                                $cStatCons = isset($stdCons->cStat) ? (string)$stdCons->cStat : 'N/A';
+                                file_put_contents($pdfFile, $pdfData);
                                 
-                                $_SESSION['flash'] = 'NFC-e enviada, mas ainda processando ou rejeitada na consulta. Motivo: ' . $motivo . ' (Código: ' . $cStatCons . ')';
-                                header("Location: comprovante.php?id_venda=$venda_id&nf=pendente");
+                                $_SESSION['flash'] = 'NFC-e Autorizada com sucesso (via consulta)! DANFE gerado.';
+                                header("Location: comprovante.php?id_venda=$venda_id&nf=ok&danfe=" . urlencode($pdfFile));
+                                exit();
+                                
+                            } catch (Exception $e) {
+                                error_log("Erro ao gerar DANFE: " . $e->getMessage());
+                                $_SESSION['flash'] = 'NFC-e Autorizada, mas erro ao gerar DANFE: ' . $e->getMessage();
+                                header("Location: comprovante.php?id_venda=$venda_id&nf=ok");
                                 exit();
                             }
-                        } catch (Exception $e) {
-                            $_SESSION['flash'] = 'Erro ao consultar recibo: ' . $e->getMessage();
+                        } else {
+                            $motivo = isset($stdCons->xMotivo) ? (string)$stdCons->xMotivo : 'sem motivo';
+                            $cStatCons = isset($stdCons->cStat) ? (string)$stdCons->cStat : 'N/A';
+                            
+                            $_SESSION['flash'] = 'NFC-e enviada, mas ainda processando ou rejeitada na consulta. Motivo: ' . $motivo . ' (Código: ' . $cStatCons . ')';
                             header("Location: comprovante.php?id_venda=$venda_id&nf=pendente");
                             exit();
                         }
+                    } catch (Exception $e) {
+                        $_SESSION['flash'] = 'Erro ao consultar recibo: ' . $e->getMessage();
+                        header("Location: comprovante.php?id_venda=$venda_id&nf=pendente");
+                        exit();
                     }
+                    
                 } else {
                     $_SESSION['flash'] = 'Erro NFe: Lote processado mas número do recibo não encontrado.';
                     header("Location: comprovante.php?id_venda=$venda_id");
@@ -757,48 +775,48 @@ require 'view/header.php';
 
 ?>
 <div class="container mt-4">
-    <h2>Registrar Venda</h2>
-
+    <h2>💳 Registrar Venda</h2>
+    <p class="text-muted mb-0" id="info-caixa">Caixa: Aberto • Operador: <?php echo $_SESSION['usuario'] ?? 'Usuário'; ?></p>
     <form method="POST">
         <div class="d-flex flex-row justify-content-between align-items-center border p-1">
             <div class="mb-4 p-1">
-                <label class="form-label">Buscar por Código de Barras</label>
+                <label class="form-label"><i class="bi bi-upc-scan me-2"></i>Buscar por Código de Barras</label>
                 <input type="text" id="codigo_barras" class="form-control" onkeypress="handleKeyPress(event)" autofocus autocomplete="off" placeholder="Escaneie ou digite o código de barras">
             </div>
 
             <div class="mb-4 p-1">
-                <label class="form-label">Buscar Produto por nome</label>
+                <label class="form-label"><i class="bi bi-search me-2"></i>Buscar Produto por nome</label>
                 <input type="text" id="busca_produto" class="form-control" placeholder="Digite o nome ou descrição" onkeypress="handleKeyPressBuscaNome(event)">
             </div>
 
             <div class="mb-4 p-1">
-                <label class="form-label">Buscar Produto por ID</label>
+                <label class="form-label"><i class="bi bi-hash me-2"></i>Buscar Produto por Código do Produto</label>
                 <input type="number" id="busca_produto_id" class="form-control" placeholder="Digite o ID do produto" onkeypress="handleKeyPressBuscaId(event)">
             </div>
         </div>
 
         <div id="resultados-busca" class="mb-3"></div>
 
-        <h5 class="d-flex align-items-center">Produtos na Venda</h5>
+        <h5 class="d-flex align-items-center"><i class="bi bi-cart4 me-2"></i>Produtos na Venda</h5>
         <div id="lista-produtos" class="mb-3"></div>
 
         <div class="mb-3">
-            <label class="form-label">Desconto Total (R$)</label>
+            <label class="form-label"><i class="bi bi-tag me-2"></i>Desconto Total (R$)</label>
             <input type="number" step="0.01" min="0" name="desconto" id="desconto" class="form-control" value="0" oninput="atualizarTotal()">
         </div>
 
         <div class="mt-3">
-            <h3><strong>Total: R$ <span id="total">0.00</span></strong></h3>
+            <h3><strong>Total: <span id="total">0.00</span></strong></h3>
         </div>
 
         <div class="mb-3 mt-3">
-            <label class="form-label">Forma de Pagamento</label>
+            <label class="form-label"><i class="bi bi-credit-card me-2"></i>Forma de Pagamento</label>
             <select class="form-select" name="forma_pagamento[]" id="forma_pagamento_principal" required onchange="verificarMultipla(this)">
-                <option value="Cartão de Crédito">Cartão de Crédito</option>
-                <option value="Cartão de Débito">Cartão de Débito</option>
-                <option value="PIX">PIX</option>
-                <option value="Dinheiro">Dinheiro</option>
-                <option value="Múltipla">Dividir pagamento</option>
+                <option value="Cartão de Crédito">💳 Cartão de Crédito</option>
+                <option value="Cartão de Débito">💳 Cartão de Débito</option>
+                <option value="PIX">📱 PIX</option>
+                <option value="Dinheiro">💵 Dinheiro</option>
+                <option value="Múltipla">🔀 Dividir Pagamento</option>
             </select>
             </div>
 
@@ -810,12 +828,12 @@ require 'view/header.php';
                         <label class="form-label">Bandeira do Cartão</label>
                         <select class="form-select" name="bandeira_cartao" id="bandeira_cartao" required>
                             <option value="">Selecione a bandeira</option>
-                            <option value="01">Visa</option>
-                            <option value="02">Mastercard</option>
-                            <option value="03">American Express</option>
-                            <option value="06">Elo</option>
-                            <option value="07">Hipercard</option>
-                            <option value="99">Outros</option>
+                            <option value="01">💳 Visa</option>
+                            <option value="02">💳 Mastercard</option>
+                            <option value="03">💳 American Express</option>
+                            <option value="06">💳 Elo</option>
+                            <option value="07">💳 Hipercard</option>
+                            <option value="99">💳 Outros</option>
                         </select>
                     </div>
                     <div class="col-md-6">
@@ -837,20 +855,20 @@ require 'view/header.php';
 
             <!-- Botão para adicionar mais formas -->
             <div class="mb-3 mt-3" id="botao-adicionar" style="display: none; margin-top: 10px;">
-                <button type="button" class="btn btn-primary" onclick="adicionarPagamento()">Adicionar Forma de Pagamento</button>
+                <button type="button" class="btn btn-primary" onclick="adicionarPagamento()"><i class="bi bi-plus-circle me-2"></i>Adicionar Forma de Pagamento</button>
             </div>
             
             <div class="mb-3 mt-3" id="valor-pago-div" style="display:none;">
-                <label class="form-label">Valor Pago (R$)</label>
+                <label class="form-label"><i class="bi bi-cash-coin me-2"></i>Valor Pago (R$)</label>
                 <input type="number" step="0.01" min="0" id="valor-pago" class="form-control" placeholder="Digite o valor pago" oninput="calcularTroco()">
             </div>
 
             <div class="mb-3 mt-3" id="troco-div" style="display:none;">
-                <h5><strong>Troco: R$ <span id="troco">0.00</span></strong></h5>
+                <h5><i class="bi bi-arrow-left-right me-2"></i><strong>Troco: <span id="troco">0.00</span></strong></h5>
             </div>
 
             <input type="hidden" name="troco_final" id="troco_final" value="0.00">
-            <button type="button" class="btn btn-success" onclick="confirmarFinalizacao()">Finalizar Venda</button>
+            <button type="button" class="btn btn-success" onclick="confirmarFinalizacao()"><i class="bi bi-check-circle me-2"></i>Finalizar Venda</button>
         </div>
 
     </form>

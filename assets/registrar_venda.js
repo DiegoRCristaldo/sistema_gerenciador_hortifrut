@@ -44,7 +44,7 @@ function buscarProdutoPorNome(nomeProduto) {
                     div.innerHTML = `
                         <span class="p-2">${produtoEncontrado.nome} (R$ ${parseFloat(produtoEncontrado.preco).toFixed(2)} - ${produtoEncontrado.unidade_medida})</span>
                         <button type="button" class="btn btn-sm btn-success"
-                            onclick='adicionarProdutoNaVenda(JSON.parse(this.dataset.product)); document.getElementById("resultados-busca").innerHTML = "";'
+                            onclick='adicionarProdutoNaVenda(JSON.parse(this.dataset.product))'
                             data-product='${JSON.stringify(produtoEncontrado)}'>Adicionar</button>
                     `;
                     resultadosDiv.appendChild(div);
@@ -95,9 +95,26 @@ function adicionarProdutoNaVenda(produto) {
         let quantidadeInicial = 1;
         produtosAdicionados[produto.id] = { ...produto, quantidade: quantidadeInicial };
     }
+    
     renderizarProdutosNaVenda();
-    // Limpa os resultados de busca após adicionar um produto
-    document.getElementById('resultados-busca').innerHTML = '';
+    
+    // CORREÇÃO: Limpa TODOS os resultados de busca e campos
+    limparResultadosBusca();
+}
+
+// ADICIONE ESTA NOVA FUNÇÃO (coloque após a função adicionarProdutoNaVenda)
+function limparResultadosBusca() {
+    const resultadosDiv = document.getElementById('resultados-busca');
+    if (resultadosDiv) {
+        resultadosDiv.innerHTML = '';
+    }
+    
+    // Também limpa os campos de busca
+    document.getElementById('busca_produto').value = '';
+    document.getElementById('busca_produto_id').value = '';
+    
+    // Foca no campo de código de barras para nova busca
+    document.getElementById('codigo_barras').focus();
 }
 
 function removerProdutoDaVenda(idProduto) {
@@ -180,16 +197,40 @@ function renderizarProdutosNaVenda() {
     atualizarTotal(); // Recalcula o total final após renderizar os produtos
 }
 
+// CORREÇÃO PARA ERRO 865 - CÁLCULO PRECISO
+function calcularComPrecisaoDecimal(valores) {
+    // Converte para centavos para evitar problemas de ponto flutuante
+    let totalCentavos = 0;
+    
+    valores.forEach(valor => {
+        const valorNum = typeof valor === 'string' ? 
+            parseFloat(valor.replace('R$', '').replace(/\./g, '').replace(',', '.')) : 
+            parseFloat(valor);
+        
+        // Multiplica por 100 e arredonda para evitar 0.1 + 0.2 = 0.3000000004
+        totalCentavos += Math.round(valorNum * 100);
+    });
+    
+    // Converte de volta para reais
+    return totalCentavos / 100;
+}
+
+// Use em todas as funções de cálculo
 function atualizarTotal() {
     let totalProdutos = 0;
+    
     for (let id in produtosAdicionados) {
         let produto = produtosAdicionados[id];
-        totalProdutos += produto.preco * produto.quantidade;
+        // CORREÇÃO: Usa cálculo preciso
+        const subtotal = calcularComPrecisaoDecimal([produto.preco * produto.quantidade]);
+        totalProdutos += subtotal;
     }
 
     let desconto = parseFloat(document.getElementById('desconto').value) || 0;
-    let totalFinal = totalProdutos - desconto;
-    if (totalFinal < 0) totalFinal = 0; // Garante que o total não seja negativo
+    // CORREÇÃO: Usa cálculo preciso para o desconto também
+    let totalFinal = calcularComPrecisaoDecimal([totalProdutos, -desconto]);
+    
+    if (totalFinal < 0) totalFinal = 0;
 
     document.getElementById('total').textContent = formatarMoeda(totalFinal);
 
@@ -300,12 +341,12 @@ function adicionarPagamento(isMultipla = false) {
     let html = `
         <div class="row">
             <div class="col-md-5">
-                <label class="form-label">Forma de Pagamento</label>
+                <label class="form-label"><i class="bi bi-credit-card me-2"></i>Forma de Pagamento</label>
                 <select class="form-select" name="forma_pagamento[]" onchange="atualizarCamposCartao(this, ${index})">
-                    <option value="Dinheiro">Dinheiro</option>
-                    <option value="Cartão de Crédito">Cartão de Crédito</option>
-                    <option value="Cartão de Débito">Cartão de Débito</option>
-                    <option value="PIX">PIX</option>
+                    <option value="Dinheiro">💵 Dinheiro</option>        
+                    <option value="Cartão de Crédito">💳 Cartão de Crédito</option>
+                    <option value="Cartão de Débito">💳 Cartão de Débito</option>
+                    <option value="PIX">📱 PIX</option>
                 </select>
             </div>
             <div class="col-md-5">
@@ -323,13 +364,13 @@ function adicionarPagamento(isMultipla = false) {
                 <div class="col-md-6">
                     <label class="form-label">Bandeira do Cartão</label>
                     <select class="form-select" name="bandeira_extra[]" required>
-                        <option value="">Selecione</option>
-                        <option value="01">Visa</option>
-                        <option value="02">Mastercard</option>
-                        <option value="03">American Express</option>
-                        <option value="06">Elo</option>
-                        <option value="07">Hipercard</option>
-                        <option value="99">Outros</option>
+                        <option value="">Selecione a bandeira</option>
+                        <option value="01">💳 Visa</option>
+                        <option value="02">💳 Mastercard</option>
+                        <option value="03">💳 American Express</option>
+                        <option value="06">💳 Elo</option>
+                        <option value="07">💳 Hipercard</option>
+                        <option value="99">💳 Outros</option>
                     </select>
                 </div>
                 <div class="col-md-6">
@@ -467,6 +508,31 @@ function calcularTrocoMultipla() {
     
     document.getElementById('troco').textContent = formatarMoeda(troco);
     document.getElementById('troco_final').value = troco.toFixed(2);
+}
+
+// FUNÇÃO AUXILIAR PARA CONVERSÃO DE MOEDA (está faltando)
+function parseCurrency(value) {
+    if (typeof value === 'string') {
+        // Debug para ver o que está chegando
+        console.log('parseCurrency input:', value);
+        
+        // Remove "R$" e espaços
+        let cleaned = value.replace('R$', '').replace(/\s/g, '').trim();
+        
+        // Se está no formato "31,00" (com vírgula decimal)
+        if (/^\d+,\d{2}$/.test(cleaned)) {
+            cleaned = cleaned.replace(',', '.');
+        }
+        // Se está no formato "1.500,00" (ponto milhar, vírgula decimal)
+        else if (/^\d+\.\d+,\d{2}$/.test(cleaned)) {
+            cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+        }
+        
+        const result = parseFloat(cleaned);
+        console.log('parseCurrency output:', result);
+        return isNaN(result) ? 0 : result;
+    }
+    return parseFloat(value) || 0;
 }
 
 // Adicione esta função para inicializar os campos de cartão
