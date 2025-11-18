@@ -45,8 +45,36 @@ if (!$caixa_id) {
     exit;
 }
 
+// Gera token único para o formulário
+if (empty($_SESSION['form_token'])) {
+    $_SESSION['form_token'] = bin2hex(random_bytes(32));
+}
+
 // Processamento da requisição POST para registrar a venda.
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Processamento POST com validações anti-duplicação
+    // Valida token
+    $token = $_POST['form_token'] ?? '';
+    if (empty($token) || $token !== $_SESSION['form_token']) {
+        error_log("TENTATIVA DE DUPLICAÇÃO: Token inválido");
+        die("Venda já processada. Não recarregue a página.");
+    }
+    
+    // Gera hash único da venda
+    $hashVenda = md5(json_encode($_POST) . time() . $operador_id);
+    
+    // Verifica duplicidade imediata
+    $stmt = $conn->prepare("SELECT id FROM vendas WHERE hash_venda = ?");
+    $stmt->bind_param("s", $hashVenda);
+    $stmt->execute();
+    
+    if ($stmt->get_result()->num_rows > 0) {
+        die("Venda duplicada detectada.");
+    }
+    
+    // Inicia transação
+    $conn->begin_transaction();
+
     $quantidades = $_POST['quantidade'] ?? []; // Quantidades de cada produto vendido
     $desconto = isset($_POST['desconto']) ? (float)$_POST['desconto'] : 0; // Desconto total na venda
     $formas_pagamento = $_POST['forma_pagamento'] ?? []; // Formas de pagamento
@@ -95,13 +123,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Insere a venda no banco de dados.
     if (count($formas_pagamento) == 1) { // Caso seja uma única forma de pagamento
         $forma = $conn->real_escape_string($formas_pagamento[0]);
-        $stmt_venda = $conn->prepare("INSERT INTO vendas (total, forma_pagamento, desconto, caixa_id, operador_id) VALUES (?, ?, ?, ?, ?)");
-        $stmt_venda->bind_param("dssii", $total, $forma, $desconto, $caixa_id, $operador_id);
+        $stmt_venda = $conn->prepare("INSERT INTO vendas (total, forma_pagamento, desconto, caixa_id, operador_id, hash_venda) VALUES (?, ?, ?, ?, ?, ?)");
+        $stmt_venda->bind_param("dssiis", $total, $forma, $desconto, $caixa_id, $operador_id, $hashVenda);
         $stmt_venda->execute();
         $venda_id = $stmt_venda->insert_id;
     } else { // Caso seja pagamento múltiplo
-        $stmt_venda = $conn->prepare("INSERT INTO vendas (total, forma_pagamento, desconto, caixa_id, operador_id) VALUES (?, 'Multipla', ?, ?, ?)");
-        $stmt_venda->bind_param("dsii", $total, $desconto, $caixa_id, $operador_id);
+        $stmt_venda = $conn->prepare("INSERT INTO vendas (total, forma_pagamento, desconto, caixa_id, operador_id, hash_venda) VALUES (?, 'Multipla', ?, ?, ?, ?)");
+        $stmt_venda->bind_param("dsiis", $total, $desconto, $caixa_id, $operador_id, $hashVenda);
         $stmt_venda->execute();
         $venda_id = $stmt_venda->insert_id;
 
@@ -348,12 +376,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         'CPF' => $dados['cpfTeste'],
         'xNome' => "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL" //-> quando o tpAmb é 2
         // 'indIEDest' NÃO DEVEM ser incluídos aqui em ambiente de produção
-        // se o CPF for informado, a Sefaz pode rejeitar ou sobrescrever.
     ];
-    $itens = $itensParaXml; // Itens da venda para o XML
+    $itens = $itensParaXml; 
     $total = $totalArray;
-    $pagamentos = []; // Inicializa o array de pagamentos
-    $troco = $troco_final; // Troco da venda
+    $pagamentos = []; 
+    $troco = $troco_final; 
     $infRespTec = [ // Informações do Responsável Técnico (opcional)
         'CNPJ' => $cnpjEmitente,
         'xContato' => 'DIEGO RODRIGUES CRISTALDO',
@@ -365,7 +392,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $dadosVenda = [
             'ide' => $ide,
             'emit' => $emit,
-            'itens' => $itensParaXml, // Itens da venda para o XML
+            'itens' => $itensParaXml, 
             'total' => $totalArray,
             'pagamentos' => [], // Inicializa o array de pagamentos
             'troco' => $troco_final, // Troco da venda
@@ -377,7 +404,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             'ide' => $ide,
             'emit' => $emit,
             'dest' => $dest, //Só é incluida em Ambiente de homologação tpAmb = 2
-            'itens' => $itensParaXml, // Itens da venda para o XML
+            'itens' => $itensParaXml, 
             'total' => $totalArray,
             'pagamentos' => [], // Inicializa o array de pagamentos
             'troco' => $troco_final, // Troco da venda
@@ -751,10 +778,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             header("Location: comprovante.php?id_venda=$venda_id");
             exit();
         }
-    } catch (Exception $e) {
-        $_SESSION['flash'] = 'Erro NFe: ' . $e->getMessage();
-        header("Location: comprovante.php?id_venda=$venda_id");
+
+        // Commit da transação
+        $conn->commit();
+        
+        // Limpa token e redireciona
+        unset($_SESSION['form_token']);
+        $_SESSION['ultima_venda_id'] = $venda_id;
+        
+        header("Location: comprovante.php?id_venda=" . $venda_id);
         exit();
+        
+    } catch (Exception $e) {
+        $conn->rollback();
+        error_log("ERRO VENDA: " . $e->getMessage());
+        unset($_SESSION['form_token']); // Permite nova tentativa
+        die("Erro ao processar venda: " . $e->getMessage());
     }
 }
 
@@ -762,22 +801,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 $uri = $_SERVER['REQUEST_URI'];
 $uri .= (strpos($uri, '?') !== false) ? '&duplicado=' . time() : '?duplicado=' . time();
 
-$lista_links = [
-    ['href' => $uri, 'icone' => 'bi bi-files', 'texto' => 'Duplicar Página', 'exibir' => true, 'target' => 'blank'],
-    ['href' => 'produtos.php', 'icone' => 'bi bi-pencil-square', 'texto' => 'Editar Produtos', 'exibir' => true, 'target' => ''],
-    ['href' => 'sangria.php', 'icone' => 'bi bi-arrow-down-circle', 'texto' => 'Fazer Sangria', 'exibir' => true, 'target' => ''],
-    ['href' => 'fechar_caixa.php', 'icone' => 'bi bi-cash-coin', 'texto' => 'Fechar Caixa', 'exibir' => true, 'target' => ''],
-    ['href' => 'index.php', 'icone' => 'bi bi-arrow-left', 'texto' => 'Voltar ao Painel', 'exibir' => $usuario_tipo === 'admin', 'target' => ''],
-    ['href' => 'logout.php', 'icone' => 'bi bi-box-arrow-right', 'texto' => 'Sair', 'exibir' => true, 'target' => ''],
-];
-
+$lista_links = listaLinks($uri, $usuario_tipo);
 require 'view/header.php';
-
 ?>
 <div class="container mt-4">
     <h2>💳 Registrar Venda</h2>
     <p class="text-muted mb-0" id="info-caixa">Caixa: Aberto • Operador: <?php echo $_SESSION['usuario'] ?? 'Usuário'; ?></p>
     <form method="POST">
+        <input type="hidden" name="form_token" value="<?php echo $_SESSION['form_token']; ?>">
         <div class="d-flex flex-row justify-content-between align-items-center border p-1">
             <div class="mb-4 p-1">
                 <label class="form-label"><i class="bi bi-upc-scan me-2"></i>Buscar por Código de Barras</label>
@@ -873,8 +904,6 @@ require 'view/header.php';
 
     </form>
 </div>
-
 <script src="assets/registrar_venda.js"></script>
-
 </body>
 </html>

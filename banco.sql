@@ -89,6 +89,8 @@ ALTER TABLE vendas ADD COLUMN chave_nfe VARCHAR(100) DEFAULT NULL,
                       ADD COLUMN status_nf VARCHAR(30) DEFAULT NULL;
 ALTER TABLE vendas ADD COLUMN caixa_id INT;
 
+ALTER TABLE vendas ADD COLUMN hash_venda VARCHAR(32) NULL;
+CREATE INDEX idx_hash_venda ON vendas(hash_venda);
 
 CREATE TABLE pagamentos (
     id INT AUTO_INCREMENT PRIMARY KEY,
